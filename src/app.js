@@ -17,22 +17,24 @@ const { startCronJobs } = require('./jobs/cron');
 
 const app = express();
 
+// ⚡ Important pour Railway / proxys
 app.set('trust proxy', 1);
 
 // Security middlewares
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: process.env.FRONTEND_URL || '*', // ton frontend en prod
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  
 }));
 
-// Rate limiting
+// Rate limiting (appliqué seulement aux routes /api)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
   message: { error: 'Trop de requêtes, veuillez réessayer plus tard.' },
+  standardHeaders: true, // Retourne X-RateLimit-* headers
+  legacyHeaders: false, // Désactive les headers X-RateLimit obsolètes
 });
 app.use('/api/', limiter);
 
@@ -41,7 +43,7 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Logging
+// Logging en dev uniquement
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
