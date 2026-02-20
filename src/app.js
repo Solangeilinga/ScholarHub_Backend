@@ -17,6 +17,8 @@ const { startCronJobs } = require('./jobs/cron');
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 // Security middlewares
 app.use(helmet());
 app.use(cors({
