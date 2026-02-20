@@ -1,0 +1,149 @@
+// This is your Prisma schema file
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String         @id @default(uuid())
+  name                 String
+  email                String         @unique
+  passwordHash         String
+  country              String?
+  nationality          String?
+  level                StudyLevel?
+  fields               String[]
+  languages            String[]
+  bio                  String?
+  avatarUrl            String?
+  role                 Role           @default(USER)
+  isVerified           Boolean        @default(false)
+  verificationToken    String?
+  resetPasswordToken   String?
+  notificationsEnabled Boolean        @default(true)
+  fcmToken             String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  savedScholarships    SavedScholarship[]
+  applications         Application[]
+  notifications        Notification[]
+
+  @@map("users")
+}
+
+model Scholarship {
+  id          String       @id @default(uuid())
+  title       String
+  description String
+  provider    String
+  providerLogo String?
+  type        ScholarshipType
+  countries   String[]
+  fields      String[]
+  level       StudyLevel[]
+  amount      Float?
+  currency    String?      @default("USD")
+  deadline    DateTime
+  startDate   DateTime?
+  duration    String?
+  link        String
+  requirements String?
+  benefits    String[]
+  languages   String[]
+  isActive    Boolean      @default(true)
+  isFeatured  Boolean      @default(false)
+  views       Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  savedBy     SavedScholarship[]
+  applications Application[]
+
+  @@map("scholarships")
+}
+
+model SavedScholarship {
+  id             String      @id @default(uuid())
+  userId         String
+  scholarshipId  String
+  savedAt        DateTime    @default(now())
+
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scholarship    Scholarship @relation(fields: [scholarshipId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scholarshipId])
+  @@map("saved_scholarships")
+}
+
+model Application {
+  id            String            @id @default(uuid())
+  userId        String
+  scholarshipId String
+  status        ApplicationStatus @default(SAVED)
+  notes         String?
+  appliedAt     DateTime?
+  updatedAt     DateTime          @updatedAt
+  createdAt     DateTime          @default(now())
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scholarship   Scholarship @relation(fields: [scholarshipId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scholarshipId])
+  @@map("applications")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  type      NotificationType
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum StudyLevel {
+  LICENCE
+  MASTER
+  DOCTORAT
+  POSTDOC
+  PROFESSIONNEL
+}
+
+enum ScholarshipType {
+  COMPLETE
+  PARTIELLE
+  RECHERCHE
+  ECHANGE
+  FORMATION
+}
+
+enum ApplicationStatus {
+  SAVED
+  EN_COURS
+  SOUMISE
+  ACCEPTEE
+  REFUSEE
+}
+
+enum NotificationType {
+  NEW_SCHOLARSHIP
+  DEADLINE_REMINDER
+  APPLICATION_UPDATE
+  SYSTEM
+}
