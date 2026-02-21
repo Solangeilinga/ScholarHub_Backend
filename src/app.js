@@ -26,7 +26,7 @@ app.set('trust proxy', 1);
 // Security middlewares
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*', // ton frontend en prod
+  origin: true, // ton frontend en prod
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
