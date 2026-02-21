@@ -34,7 +34,7 @@ app.use(cors({
 // Rate limiting (appliqué seulement aux routes /api)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: 500,
   message: { error: 'Trop de requêtes, veuillez réessayer plus tard.' },
   standardHeaders: true, // Retourne X-RateLimit-* headers
   legacyHeaders: false, // Désactive les headers X-RateLimit obsolètes

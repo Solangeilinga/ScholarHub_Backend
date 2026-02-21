@@ -1,30 +1,23 @@
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 const logger = require('./logger');
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: 465,           // ← était 587
-  secure: true,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-const sendEmail = async ({ to, subject, html, text }) => {
+const sendEmail = async ({ to, subject, html }) => {
   try {
-    const info = await transporter.sendMail({
-      from: `"ScholarHub" <${process.env.EMAIL_FROM}>`,
+    await sgMail.send({
       to,
+      from: {
+        email: process.env.SENDGRID_FROM,
+        name: 'ScholarHub',
+      },
       subject,
       html,
-      text,
     });
-    logger.info(`Email envoyé à ${to}: ${info.messageId}`);
-    return info;
+    logger.info(`✅ Email envoyé à ${to}`);
   } catch (error) {
-    logger.error(`Erreur envoi email à ${to}:`, error);
-    // Don't throw - email failures shouldn't break the app
+    logger.error(`Erreur envoi email à ${to}: ${error.message}`);
+    // Ne bloque pas l'app
   }
 };
 
