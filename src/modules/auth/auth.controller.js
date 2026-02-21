@@ -1,5 +1,6 @@
 const { validationResult } = require('express-validator');
 const authService = require('./auth.service');
+const prisma = require('../../config/db');
 
 const register = async (req, res, next) => {
   try {
@@ -41,8 +42,17 @@ const login = async (req, res, next) => {
   }
 };
 
-const logout = async (req, res) => {
-  res.json({ message: 'Déconnexion réussie' });
+// Supprime le FCM token à la déconnexion
+const logout = async (req, res, next) => {
+  try {
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { fcmToken: null },
+    });
+    res.json({ message: 'Déconnexion réussie' });
+  } catch (error) {
+    next(error);
+  }
 };
 
 const getMe = async (req, res, next) => {

@@ -14,6 +14,9 @@ const adminRoutes = require('./modules/admin/admin.routes');
 const { errorHandler } = require('./middlewares/error.middleware');
 const logger = require('./utils/logger');
 const { startCronJobs } = require('./jobs/cron');
+const chatRoutes = require('./modules/chat/chat.routes');
+const supportRoutes = require('./modules/support/support.routes');
+
 
 const app = express();
 
@@ -57,6 +60,14 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+
+//chatbot route
+app.use('/api/chat', chatRoutes);
+
+//support route
+
+app.use('/api/support', supportRoutes);
 
 // API Routes
 app.use('/api/auth', authRoutes);

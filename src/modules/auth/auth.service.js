@@ -135,4 +135,14 @@ const refreshToken = async (token) => {
   }
 };
 
-module.exports = { register, login, getMe, forgotPassword, resetPassword, verifyEmail, refreshToken };
+
+const logout = async (userId) => {
+  // Supprimer le FCM token à la déconnexion
+  await prisma.user.update({
+    where: { id: userId },
+    data: { fcmToken: null },
+  });
+};
+
+module.exports = { register, login, getMe, forgotPassword, resetPassword, verifyEmail, refreshToken, logout };
+
