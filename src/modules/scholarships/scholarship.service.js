@@ -70,28 +70,32 @@ const getRecommended = async (userId) => {
 
   const scholarships = await prisma.scholarship.findMany({
     where: { isActive: true, deadline: { gte: new Date() } },
+    orderBy: { createdAt: 'desc' },
   });
 
-  // Scoring algorithm
   const scored = scholarships.map((s) => {
     let score = 0;
-
     if (user.country && s.countries.includes(user.country)) score += 40;
     if (user.level && s.level.includes(user.level)) score += 30;
     if (user.fields?.length && s.fields.some((f) => user.fields.includes(f))) score += 20;
     if (user.languages?.length && s.languages.some((l) => user.languages.includes(l))) score += 10;
-
-    // Urgency bonus
     const daysLeft = Math.ceil((new Date(s.deadline) - new Date()) / (1000 * 60 * 60 * 24));
     if (daysLeft > 30) score += 5;
-
     return { ...s, score };
   });
 
-  return scored
-    .filter((s) => s.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 10);
+  const withScore = scored.filter((s) => s.score > 0).sort((a, b) => b.score - a.score);
+
+  // ← Si profil incomplet → retourner les plus récentes quand même
+  if (withScore.length < 5) {
+    const ids = withScore.map((s) => s.id);
+    const fallback = scored
+      .filter((s) => !ids.includes(s.id))
+      .sort((a, b) => b.score - a.score || new Date(b.deadline) - new Date(a.deadline));
+    return [...withScore, ...fallback].slice(0, 10);
+  }
+
+  return withScore.slice(0, 10);
 };
 
 const saveScholarship = async (userId, scholarshipId) => {
