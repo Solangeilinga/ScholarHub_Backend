@@ -48,6 +48,31 @@ const getAll = async ({ page = 1, limit = 10, search, country, field, level, typ
   };
 };
 
+const getAllAdmin = async ({ page = 1, limit = 100, search }) => {
+  const skip = (page - 1) * limit;
+  const where = {}; // ← pas de filtre isActive ni deadline
+
+  if (search) {
+    where.OR = [
+      { title: { contains: search, mode: 'insensitive' } },
+      { provider: { contains: search, mode: 'insensitive' } },
+    ];
+  }
+
+  const [scholarships, total] = await Promise.all([
+    prisma.scholarship.findMany({
+      where,
+      skip,
+      take: parseInt(limit),
+      orderBy: { createdAt: 'desc' }, // ← les plus récentes en premier
+    }),
+    prisma.scholarship.count({ where }),
+  ]);
+
+  return { scholarships, pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / limit) } };
+};
+
+
 const getFeatured = async () => {
   return prisma.scholarship.findMany({
     where: { isActive: true, isFeatured: true, deadline: { gte: new Date() } },
@@ -153,4 +178,4 @@ const create = async (data) => prisma.scholarship.create({ data });
 const update = async (id, data) => prisma.scholarship.update({ where: { id }, data });
 const remove = async (id) => prisma.scholarship.delete({ where: { id } });
 
-module.exports = { getAll, getFeatured, getOne, getRecommended, saveScholarship, unsaveScholarship, trackApplication, updateApplication, incrementView, getStats, create, update, remove };
+module.exports = { getAllAdmin, getAll, getFeatured, getOne, getRecommended, saveScholarship, unsaveScholarship, trackApplication, updateApplication, incrementView, getStats, create, update, remove };

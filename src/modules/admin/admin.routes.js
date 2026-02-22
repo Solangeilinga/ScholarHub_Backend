@@ -25,6 +25,9 @@ router.get('/stats', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+
+router.get('/admin/all', authenticate, isAdmin, scholarshipController.getAllAdmin);
+
 router.get('/users', async (req, res, next) => {
   try {
     const { page = 1, limit = 20 } = req.query;
