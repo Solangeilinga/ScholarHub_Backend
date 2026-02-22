@@ -1,86 +1,103 @@
-const express = require('express');
-const router = express.Router();
-const prisma = require('../../config/db');
-const { authenticate, requireAdmin } = require('../../middlewares/auth.middleware');
+const scholarshipService = require('./scholarship.service');
 
-router.use(authenticate, requireAdmin);
-
-router.get('/stats', async (req, res, next) => {
+const getAll = async (req, res, next) => {
   try {
-    const [totalUsers, totalScholarships, activeScholarships, totalApplications] = await Promise.all([
-      prisma.user.count(),
-      prisma.scholarship.count(),
-      prisma.scholarship.count({ where: { isActive: true, deadline: { gte: new Date() } } }),
-      prisma.application.count(),
-    ]);
-
-    const recentUsers = await prisma.user.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: { id: true, name: true, email: true, country: true, createdAt: true },
-    });
-
-    res.json({ stats: { totalUsers, totalScholarships, activeScholarships, totalApplications }, recentUsers });
+    const result = await scholarshipService.getAll(req.query);
+    res.json(result);
   } catch (error) { next(error); }
-});
+};
 
-// ← Route admin pour toutes les bourses sans filtre
-router.get('/scholarships', async (req, res, next) => {
+const getAllAdmin = async (req, res, next) => {
   try {
-    const { page = 1, limit = 100, search } = req.query;
-    const skip = (page - 1) * parseInt(limit);
-    const where = {};
-
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { provider: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-
-    const [scholarships, total] = await Promise.all([
-      prisma.scholarship.findMany({
-        where,
-        skip,
-        take: parseInt(limit),
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.scholarship.count({ where }),
-    ]);
-
-    res.json({
-      scholarships,
-      pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / parseInt(limit)) },
-    });
+    const result = await scholarshipService.getAllAdmin(req.query);
+    res.json(result);
   } catch (error) { next(error); }
-});
+};
 
-router.get('/users', async (req, res, next) => {
+
+
+const getFeatured = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
-    const skip = (page - 1) * parseInt(limit);
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        skip, take: parseInt(limit),
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, name: true, email: true, country: true, role: true, isVerified: true, createdAt: true },
-      }),
-      prisma.user.count(),
-    ]);
-    res.json({ users, pagination: { page: parseInt(page), total, totalPages: Math.ceil(total / parseInt(limit)) } });
+    const scholarships = await scholarshipService.getFeatured();
+    res.json({ scholarships });
   } catch (error) { next(error); }
-});
+};
 
-router.patch('/users/:id/role', async (req, res, next) => {
+const getOne = async (req, res, next) => {
   try {
-    const { role } = req.body;
-    const user = await prisma.user.update({
-      where: { id: req.params.id },
-      data: { role },
-      select: { id: true, name: true, email: true, role: true },
-    });
-    res.json({ user });
+    const scholarship = await scholarshipService.getOne(req.params.id);
+    res.json({ scholarship });
   } catch (error) { next(error); }
-});
+};
 
-module.exports = router;
+const getRecommended = async (req, res, next) => {
+  try {
+    const scholarships = await scholarshipService.getRecommended(req.user.id);
+    res.json({ scholarships });
+  } catch (error) { next(error); }
+};
+
+const saveScholarship = async (req, res, next) => {
+  try {
+    await scholarshipService.saveScholarship(req.user.id, req.params.id);
+    res.json({ message: 'Bourse sauvegardée' });
+  } catch (error) { next(error); }
+};
+
+const unsaveScholarship = async (req, res, next) => {
+  try {
+    await scholarshipService.unsaveScholarship(req.user.id, req.params.id);
+    res.json({ message: 'Bourse retirée des favoris' });
+  } catch (error) { next(error); }
+};
+
+const trackApplication = async (req, res, next) => {
+  try {
+    const application = await scholarshipService.trackApplication(req.user.id, req.params.id, req.body);
+    res.status(201).json({ application });
+  } catch (error) { next(error); }
+};
+
+const updateApplication = async (req, res, next) => {
+  try {
+    const application = await scholarshipService.updateApplication(req.user.id, req.params.id, req.body);
+    res.json({ application });
+  } catch (error) { next(error); }
+};
+
+const incrementView = async (req, res, next) => {
+  try {
+    await scholarshipService.incrementView(req.params.id);
+    res.json({ message: 'OK' });
+  } catch (error) { next(error); }
+};
+
+const getStats = async (req, res, next) => {
+  try {
+    const stats = await scholarshipService.getStats();
+    res.json({ stats });
+  } catch (error) { next(error); }
+};
+
+const create = async (req, res, next) => {
+  try {
+    const scholarship = await scholarshipService.create(req.body);
+    res.status(201).json({ scholarship });
+  } catch (error) { next(error); }
+};
+
+const update = async (req, res, next) => {
+  try {
+    const scholarship = await scholarshipService.update(req.params.id, req.body);
+    res.json({ scholarship });
+  } catch (error) { next(error); }
+};
+
+const remove = async (req, res, next) => {
+  try {
+    await scholarshipService.remove(req.params.id);
+    res.json({ message: 'Bourse supprimée' });
+  } catch (error) { next(error); }
+};
+
+module.exports = { getAll, getAllAdmin, getFeatured, getOne, getRecommended, saveScholarship, unsaveScholarship, trackApplication, updateApplication, incrementView, getStats, create, update, remove };
