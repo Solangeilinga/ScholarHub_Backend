@@ -7,7 +7,6 @@ const { authenticate, requireAdmin } = require('../../middlewares/auth.middlewar
 router.get('/', scholarshipController.getAll);
 router.get('/featured', scholarshipController.getFeatured);
 router.get('/stats', scholarshipController.getStats);
-router.get('/:id', scholarshipController.getOne);
 
 // Protected routes
 router.get('/user/recommended', authenticate, scholarshipController.getRecommended);
@@ -21,5 +20,8 @@ router.post('/:id/view', scholarshipController.incrementView);
 router.post('/', authenticate, requireAdmin, scholarshipController.create);
 router.put('/:id', authenticate, requireAdmin, scholarshipController.update);
 router.delete('/:id', authenticate, requireAdmin, scholarshipController.remove);
+
+// ← /:id doit être en dernier sinon il capture tout
+router.get('/:id', scholarshipController.getOne);
 
 module.exports = router;
