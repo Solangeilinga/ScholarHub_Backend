@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const prisma = require('../config/db');
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -22,7 +23,17 @@ const sendPushNotification = async (fcmToken, title, body, data = {}) => {
       },
     });
   } catch (error) {
-    console.error('Push notification error:', error.message);
+    // Token expiré ou invalide → supprimer de la DB
+    if (
+      error.code === 'messaging/registration-token-not-registered' ||
+      error.code === 'messaging/invalid-registration-token'
+    ) {
+      await prisma.user.updateMany({
+        where: { fcmToken },
+        data: { fcmToken: null },
+      });
+    }
+    console.error('Push error:', error.message);
   }
 };
 
@@ -37,7 +48,7 @@ const sendPushToMany = async (fcmTokens, title, body, data = {}) => {
 
   for (const chunk of chunks) {
     try {
-      await admin.messaging().sendEachForMulticast({
+      const response = await admin.messaging().sendEachForMulticast({
         tokens: chunk,
         notification: { title, body },
         data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
@@ -46,6 +57,25 @@ const sendPushToMany = async (fcmTokens, title, body, data = {}) => {
           notification: { sound: 'default', channelId: 'scholarhub' },
         },
       });
+
+      // Nettoyer les tokens expirés
+      const expiredTokens = [];
+      response.responses.forEach((r, i) => {
+        if (
+          !r.success &&
+          (r.error?.code === 'messaging/registration-token-not-registered' ||
+            r.error?.code === 'messaging/invalid-registration-token')
+        ) {
+          expiredTokens.push(chunk[i]);
+        }
+      });
+
+      if (expiredTokens.length > 0) {
+        await prisma.user.updateMany({
+          where: { fcmToken: { in: expiredTokens } },
+          data: { fcmToken: null },
+        });
+      }
     } catch (error) {
       console.error('Multicast error:', error.message);
     }

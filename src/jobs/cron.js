@@ -1,9 +1,10 @@
 const cron = require('node-cron');
 const prisma = require('../config/db');
 const { sendEmail } = require('../utils/mailer');
-const { createAndSendNotification, notifyAllUsers } = require('../utils/notifications');
+const { createAndSendNotification } = require('../utils/notifications');
 const logger = require('../utils/logger');
 
+// ─── Rappels deadline ─────────────────────────────────────────────────────────
 const sendDeadlineReminders = async () => {
   logger.info('⏰ Vérification des deadlines...');
 
@@ -16,10 +17,7 @@ const sendDeadlineReminders = async () => {
     nextDay.setDate(nextDay.getDate() + 1);
 
     const scholarships = await prisma.scholarship.findMany({
-      where: {
-        isActive: true,
-        deadline: { gte: targetDate, lt: nextDay },
-      },
+      where: { isActive: true, deadline: { gte: targetDate, lt: nextDay } },
     });
 
     for (const scholarship of scholarships) {
@@ -27,13 +25,7 @@ const sendDeadlineReminders = async () => {
         where: { scholarshipId: scholarship.id },
         include: {
           user: {
-            select: {
-              id: true,
-              email: true,
-              name: true,
-              notificationsEnabled: true,
-              fcmToken: true,
-            },
+            select: { id: true, email: true, name: true, notificationsEnabled: true, fcmToken: true },
           },
         },
       });
@@ -41,7 +33,6 @@ const sendDeadlineReminders = async () => {
       for (const { user } of saved) {
         if (!user.notificationsEnabled) continue;
 
-        // Email
         await sendEmail({
           to: user.email,
           subject: `⏰ ScholarHub - Deadline dans ${days} jour(s): ${scholarship.title}`,
@@ -66,7 +57,6 @@ const sendDeadlineReminders = async () => {
           `,
         });
 
-        // Notification in-app + push Firebase
         await createAndSendNotification(
           user.id,
           `⏰ Deadline dans ${days} jour(s)`,
@@ -81,6 +71,7 @@ const sendDeadlineReminders = async () => {
   logger.info('✅ Rappels de deadline envoyés');
 };
 
+// ─── Nouvelles bourses ────────────────────────────────────────────────────────
 const notifyNewScholarships = async () => {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -93,28 +84,17 @@ const notifyNewScholarships = async () => {
 
   const users = await prisma.user.findMany({
     where: { notificationsEnabled: true },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      country: true,
-      level: true,
-      fields: true,
-      fcmToken: true,
-    },
+    select: { id: true, email: true, name: true, country: true, level: true, fields: true, fcmToken: true },
   });
 
   for (const user of users) {
-    const relevant = newScholarships.filter((s) => {
-      return (
-        (!user.country || s.countries.includes(user.country) || s.countries.length === 0) &&
-        (!user.level || s.level.includes(user.level))
-      );
-    });
+    const relevant = newScholarships.filter((s) =>
+      (!user.country || s.countries.includes(user.country) || s.countries.length === 0) &&
+      (!user.level || s.level.includes(user.level))
+    );
 
     if (relevant.length === 0) continue;
 
-    // Email
     await sendEmail({
       to: user.email,
       subject: `🎓 ScholarHub - ${relevant.length} nouvelle(s) bourse(s) pour vous !`,
@@ -132,13 +112,11 @@ const notifyNewScholarships = async () => {
                 <p style="margin: 0; color: #6B7280;">${s.provider} | Deadline: ${new Date(s.deadline).toLocaleDateString('fr-FR')}</p>
               </div>
             `).join('')}
-            <p style="color: #6B7280;">Consultez l'application ScholarHub pour plus de détails.</p>
           </div>
         </div>
       `,
     });
 
-    // Notification in-app + push Firebase
     await createAndSendNotification(
       user.id,
       `🎓 ${relevant.length} nouvelle(s) bourse(s) pour vous !`,
@@ -149,16 +127,98 @@ const notifyNewScholarships = async () => {
   }
 };
 
+// ─── 🆕 Notification du soir 20h ─────────────────────────────────────────────
+const sendEveningReminder = async () => {
+  logger.info('🌙 Envoi des notifications du soir...');
+
+  const in30Days = new Date();
+  in30Days.setDate(in30Days.getDate() + 30);
+
+  // Utilisateurs avec bourses sauvegardées dont la deadline approche
+  const usersWithSaved = await prisma.user.findMany({
+    where: {
+      notificationsEnabled: true,
+      fcmToken: { not: null },
+      savedScholarships: {
+        some: {
+          scholarship: {
+            isActive: true,
+            deadline: { gte: new Date(), lte: in30Days },
+          },
+        },
+      },
+    },
+    select: {
+      id: true,
+      savedScholarships: {
+        where: {
+          scholarship: {
+            isActive: true,
+            deadline: { gte: new Date(), lte: in30Days },
+          },
+        },
+        include: {
+          scholarship: { select: { title: true, deadline: true } },
+        },
+      },
+    },
+  });
+
+  const notifiedIds = [];
+
+  for (const user of usersWithSaved) {
+    const count = user.savedScholarships.length;
+    const nearest = user.savedScholarships.sort(
+      (a, b) => new Date(a.scholarship.deadline) - new Date(b.scholarship.deadline)
+    )[0];
+    const daysLeft = Math.ceil(
+      (new Date(nearest.scholarship.deadline) - new Date()) / (1000 * 60 * 60 * 24)
+    );
+
+    await createAndSendNotification(
+      user.id,
+      '📚 Rappel ScholarHub',
+      count === 1
+        ? `La bourse "${nearest.scholarship.title}" expire dans ${daysLeft} jours !`
+        : `Vous avez ${count} bourses sauvegardées. La plus proche expire dans ${daysLeft} jours !`,
+      'EVENING_REMINDER',
+      {}
+    );
+
+    notifiedIds.push(user.id);
+  }
+
+  // Utilisateurs sans bourses sauvegardées → message d'encouragement
+  const usersWithoutSaved = await prisma.user.findMany({
+    where: {
+      notificationsEnabled: true,
+      fcmToken: { not: null },
+      id: { notIn: notifiedIds },
+    },
+    select: { id: true },
+  });
+
+  for (const user of usersWithoutSaved) {
+    await createAndSendNotification(
+      user.id,
+      '🎓 Bonsoir !',
+      'De nouvelles bourses vous attendent. Prenez 5 minutes pour explorer ScholarHub !',
+      'EVENING_REMINDER',
+      {}
+    );
+  }
+
+  logger.info(
+    `🌙 Notifications du soir envoyées à ${notifiedIds.length + usersWithoutSaved.length} utilisateurs`
+  );
+};
+
+// ─── Démarrage ────────────────────────────────────────────────────────────────
 const startCronJobs = () => {
-  cron.schedule('0 8 * * *', sendDeadlineReminders, {
-    timezone: 'Africa/Abidjan',
-  });
-
-  cron.schedule('0 9 * * *', notifyNewScholarships, {
-    timezone: 'Africa/Abidjan',
-  });
-
-  logger.info('🔄 Cron jobs démarrés');
+  cron.schedule('0 8 * * *', sendDeadlineReminders, { timezone: 'Africa/Abidjan' });
+  cron.schedule('0 9 * * *', notifyNewScholarships, { timezone: 'Africa/Abidjan' });
+  cron.schedule('0 20 * * *', sendEveningReminder, { timezone: 'Africa/Abidjan' }); // 🆕 20h
+  logger.info('🔄 Cron jobs démarrés (8h, 9h, 20h)');
 };
 
 module.exports = { startCronJobs };
