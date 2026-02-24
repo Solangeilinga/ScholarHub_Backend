@@ -36,6 +36,7 @@ const getMyTickets = async (req, res) => {
 };
 
 // NOUVEAU : Étudiant supprime un ticket
+// Étudiant supprime un ticket
 const deleteTicket = async (req, res) => {
   try {
     const { id } = req.params;
@@ -53,12 +54,7 @@ const deleteTicket = async (req, res) => {
       return res.status(404).json({ error: 'Ticket non trouvé' });
     }
 
-    // Optionnel : Empêcher la suppression des tickets déjà répondus
-    if (ticket.status === 'ANSWERED') {
-      return res.status(400).json({ 
-        error: 'Impossible de supprimer un ticket qui a déjà reçu une réponse' 
-      });
-    }
+    // ✅ SUPPRIMER LE BLOCK if (ticket.status === 'ANSWERED') { ... }
 
     // Supprimer le ticket
     await prisma.supportTicket.delete({
