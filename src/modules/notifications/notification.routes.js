@@ -5,6 +5,7 @@ const { authenticate } = require('../../middlewares/auth.middleware');
 
 router.use(authenticate);
 
+// GET - Récupérer les notifications
 router.get('/', async (req, res, next) => {
   try {
     const notifications = await prisma.notification.findMany({
@@ -16,6 +17,7 @@ router.get('/', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// PATCH - Marquer une notification comme lue
 router.patch('/:id/read', async (req, res, next) => {
   try {
     await prisma.notification.update({
@@ -26,6 +28,7 @@ router.patch('/:id/read', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// PATCH - Marquer toutes les notifications comme lues
 router.patch('/read-all', async (req, res, next) => {
   try {
     await prisma.notification.updateMany({
@@ -36,6 +39,7 @@ router.patch('/read-all', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// GET - Compter les notifications non lues
 router.get('/unread-count', async (req, res, next) => {
   try {
     const count = await prisma.notification.count({
@@ -43,6 +47,60 @@ router.get('/unread-count', async (req, res, next) => {
     });
     res.json({ count });
   } catch (error) { next(error); }
+});
+
+// DELETE - Supprimer une notification spécifique (NOUVEAU)
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    // Vérifier que la notification appartient à l'utilisateur
+    const notification = await prisma.notification.findFirst({
+      where: {
+        id: id,
+        userId: userId
+      }
+    });
+
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification non trouvée' });
+    }
+
+    // Supprimer la notification
+    await prisma.notification.delete({
+      where: { id: id }
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Notification supprimée avec succès' 
+    });
+  } catch (error) { 
+    console.error('Erreur suppression notification:', error);
+    next(error); 
+  }
+});
+
+// DELETE - Supprimer toutes les notifications (NOUVEAU)
+router.delete('/all', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    // Supprimer toutes les notifications de l'utilisateur
+    const result = await prisma.notification.deleteMany({
+      where: { userId: userId }
+    });
+
+    res.json({ 
+      success: true, 
+      message: `Toutes les notifications (${result.count}) ont été supprimées`,
+      count: result.count
+    });
+  } catch (error) { 
+    console.error('Erreur suppression toutes notifications:', error);
+    next(error); 
+  }
 });
 
 module.exports = router;
