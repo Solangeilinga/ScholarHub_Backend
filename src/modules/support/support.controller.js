@@ -35,6 +35,46 @@ const getMyTickets = async (req, res) => {
   }
 };
 
+// NOUVEAU : Étudiant supprime un ticket
+const deleteTicket = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    // Vérifier que le ticket existe et appartient à l'utilisateur
+    const ticket = await prisma.supportTicket.findFirst({
+      where: {
+        id: id,
+        userId: userId
+      }
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: 'Ticket non trouvé' });
+    }
+
+    // Optionnel : Empêcher la suppression des tickets déjà répondus
+    if (ticket.status === 'ANSWERED') {
+      return res.status(400).json({ 
+        error: 'Impossible de supprimer un ticket qui a déjà reçu une réponse' 
+      });
+    }
+
+    // Supprimer le ticket
+    await prisma.supportTicket.delete({
+      where: { id: id }
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Ticket supprimé avec succès' 
+    });
+  } catch (error) {
+    console.error('Erreur suppression ticket:', error);
+    res.status(500).json({ error: 'Erreur lors de la suppression du ticket' });
+  }
+};
+
 // Admin voit tous les tickets
 const getAllTickets = async (req, res) => {
   try {
@@ -131,4 +171,11 @@ const closeTicket = async (req, res) => {
   }
 };
 
-module.exports = { createTicket, getMyTickets, getAllTickets, replyTicket, closeTicket };
+module.exports = { 
+  createTicket, 
+  getMyTickets, 
+  deleteTicket, // ← NOUVEAU
+  getAllTickets, 
+  replyTicket, 
+  closeTicket 
+};
