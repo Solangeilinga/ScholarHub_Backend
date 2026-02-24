@@ -134,18 +134,18 @@ enum Role {
 }
 
 enum StudyLevel {
+  BEPC
+  BACCALAUREAT
   LICENCE
+  MAITRISE
   MASTER
   DOCTORAT
-  POSTDOC
-  PROFESSIONNEL
 }
 
 enum ScholarshipType {
   COMPLETE
   PARTIELLE
   RECHERCHE
-  ECHANGE
   FORMATION
 }
 
