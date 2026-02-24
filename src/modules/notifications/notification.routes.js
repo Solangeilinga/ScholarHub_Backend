@@ -49,7 +49,27 @@ router.get('/unread-count', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-// DELETE - Supprimer une notification spécifique (NOUVEAU)
+// ⚠️ IMPORTANT : Route spécifique AVANT la route dynamique
+// DELETE - Supprimer toutes les notifications
+router.delete('/all', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const result = await prisma.notification.deleteMany({
+      where: { userId: userId }
+    });
+
+    res.json({ 
+      success: true, 
+      message: `Toutes les notifications (${result.count}) ont été supprimées`,
+      count: result.count
+    });
+  } catch (error) { 
+    console.error('Erreur suppression toutes notifications:', error);
+    next(error); 
+  }
+});
+
+// DELETE - Supprimer une notification spécifique (DOIT ÊTRE APRÈS /all)
 router.delete('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -78,27 +98,6 @@ router.delete('/:id', async (req, res, next) => {
     });
   } catch (error) { 
     console.error('Erreur suppression notification:', error);
-    next(error); 
-  }
-});
-
-// DELETE - Supprimer toutes les notifications (NOUVEAU)
-router.delete('/all', async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-
-    // Supprimer toutes les notifications de l'utilisateur
-    const result = await prisma.notification.deleteMany({
-      where: { userId: userId }
-    });
-
-    res.json({ 
-      success: true, 
-      message: `Toutes les notifications (${result.count}) ont été supprimées`,
-      count: result.count
-    });
-  } catch (error) { 
-    console.error('Erreur suppression toutes notifications:', error);
     next(error); 
   }
 });
