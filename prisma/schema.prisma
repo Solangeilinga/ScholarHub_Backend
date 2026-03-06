@@ -65,6 +65,10 @@ model Scholarship {
   savedBy      SavedScholarship[]
   applications Application[]
 
+  @@index([isActive])
+  @@index([isFeatured])
+  @@index([createdAt])
+  @@index([deadline])
   @@map("scholarships")
 }
 
@@ -78,6 +82,8 @@ model SavedScholarship {
   scholarship Scholarship @relation(fields: [scholarshipId], references: [id], onDelete: Cascade)
 
   @@unique([userId, scholarshipId])
+  @@index([userId])
+  @@index([scholarshipId])
   @@map("saved_scholarships")
 }
 
@@ -95,6 +101,8 @@ model Application {
   scholarship Scholarship @relation(fields: [scholarshipId], references: [id], onDelete: Cascade)
 
   @@unique([userId, scholarshipId])
+  @@index([userId, status])
+  @@index([scholarshipId, status])
   @@map("applications")
 }
 
@@ -110,6 +118,8 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
   @@map("notifications")
 }
 
@@ -125,6 +135,8 @@ model SupportTicket {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
   @@map("support_tickets")
 }
 

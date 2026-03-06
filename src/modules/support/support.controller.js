@@ -74,24 +74,56 @@ const deleteTicket = async (req, res) => {
 // Admin voit tous les tickets
 const getAllTickets = async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, includeStats, page, limit } = req.query;
     const where = status ? { status } : {};
+    const shouldIncludeStats =
+      includeStats !== '0' && includeStats !== 'false';
+    const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+    const skip = (parsedPage - 1) * parsedLimit;
 
-    const tickets = await prisma.supportTicket.findMany({
+    const ticketsPromise = prisma.supportTicket.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        subject: true,
+        message: true,
+        reply: true,
+        status: true,
+        createdAt: true,
         user: { select: { name: true, email: true, country: true } },
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take: parsedLimit,
     });
 
-    const stats = {
-      total: await prisma.supportTicket.count(),
-      open: await prisma.supportTicket.count({ where: { status: 'OPEN' } }),
-      answered: await prisma.supportTicket.count({ where: { status: 'ANSWERED' } }),
+    const statsPromise = shouldIncludeStats
+      ? Promise.all([
+          prisma.supportTicket.count(),
+          prisma.supportTicket.count({ where: { status: 'OPEN' } }),
+          prisma.supportTicket.count({ where: { status: 'ANSWERED' } }),
+        ])
+      : Promise.resolve(null);
+
+    const [tickets, statsValues] = await Promise.all([ticketsPromise, statsPromise]);
+
+    const response = { tickets };
+    if (statsValues) {
+      response.stats = {
+        total: statsValues[0],
+        open: statsValues[1],
+        answered: statsValues[2],
+      };
+    }
+
+    response.pagination = {
+      page: parsedPage,
+      limit: parsedLimit,
+      hasMore: tickets.length === parsedLimit,
     };
 
-    res.json({ tickets, stats });
+    res.json(response);
   } catch (error) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
