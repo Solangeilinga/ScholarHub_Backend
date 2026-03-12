@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const prisma = require('../config/db');
 const { sendEmail } = require('../utils/mailer');
 const { createAndSendNotification } = require('../utils/notifications');
+const { runScraping } = require('../modules/scraper/scraper.service');
 const logger = require('../utils/logger');
 
 // ─── Rappels deadline ─────────────────────────────────────────────────────────
@@ -127,14 +128,13 @@ const notifyNewScholarships = async () => {
   }
 };
 
-// ─── 🆕 Notification du soir 20h ─────────────────────────────────────────────
+// ─── Notification du soir 20h ─────────────────────────────────────────────────
 const sendEveningReminder = async () => {
   logger.info('🌙 Envoi des notifications du soir...');
 
   const in30Days = new Date();
   in30Days.setDate(in30Days.getDate() + 30);
 
-  // Utilisateurs avec bourses sauvegardées dont la deadline approche
   const usersWithSaved = await prisma.user.findMany({
     where: {
       notificationsEnabled: true,
@@ -188,7 +188,6 @@ const sendEveningReminder = async () => {
     notifiedIds.push(user.id);
   }
 
-  // Utilisateurs sans bourses sauvegardées → message d'encouragement
   const usersWithoutSaved = await prisma.user.findMany({
     where: {
       notificationsEnabled: true,
@@ -208,17 +207,27 @@ const sendEveningReminder = async () => {
     );
   }
 
-  logger.info(
-    `🌙 Notifications du soir envoyées à ${notifiedIds.length + usersWithoutSaved.length} utilisateurs`
-  );
+  logger.info(`🌙 Notifications du soir envoyées à ${notifiedIds.length + usersWithoutSaved.length} utilisateurs`);
+};
+
+// ─── 🆕 Scraping automatique ──────────────────────────────────────────────────
+const runDailyScraping = async () => {
+  logger.info('🔍 Scraping automatique quotidien...');
+  try {
+    const results = await runScraping();
+    logger.info(`✅ Scraping terminé — ${results.inserted} nouvelles bourses en attente de validation`);
+  } catch (e) {
+    logger.error(`❌ Erreur scraping: ${e.message}`);
+  }
 };
 
 // ─── Démarrage ────────────────────────────────────────────────────────────────
 const startCronJobs = () => {
   cron.schedule('0 8 * * *', sendDeadlineReminders, { timezone: 'Africa/Abidjan' });
   cron.schedule('0 9 * * *', notifyNewScholarships, { timezone: 'Africa/Abidjan' });
-  cron.schedule('0 20 * * *', sendEveningReminder, { timezone: 'Africa/Abidjan' }); // 🆕 20h
-  logger.info('🔄 Cron jobs démarrés (8h, 9h, 20h)');
+  cron.schedule('0 20 * * *', sendEveningReminder, { timezone: 'Africa/Abidjan' });
+  cron.schedule('0 3 * * *', runDailyScraping, { timezone: 'Africa/Abidjan' }); // 🆕 3h du matin
+  logger.info('🔄 Cron jobs démarrés (3h scraping, 8h deadlines, 9h nouvelles bourses, 20h soir)');
 };
 
 module.exports = { startCronJobs };

@@ -1,4 +1,3 @@
-// This is your Prisma schema file
 generator client {
   provider = "prisma-client-js"
 }
@@ -38,7 +37,7 @@ model User {
 }
 
 model Scholarship {
-  id           String          @id @default(uuid())
+  id           String            @id @default(uuid())
   title        String
   description  String
   provider     String
@@ -48,7 +47,7 @@ model Scholarship {
   fields       String[]
   level        StudyLevel[]
   amount       Float?
-  currency     String?         @default("USD")
+  currency     String?           @default("USD")
   deadline     DateTime
   startDate    DateTime?
   duration     String?
@@ -56,11 +55,19 @@ model Scholarship {
   requirements String?
   benefits     String[]
   languages    String[]
-  isActive     Boolean         @default(true)
-  isFeatured   Boolean         @default(false)
-  views        Int             @default(0)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  isActive     Boolean           @default(true)
+  isFeatured   Boolean           @default(false)
+  views        Int               @default(0)
+
+  // ← Champs scraping
+  status       ScholarshipStatus @default(APPROVED)
+  source       String?
+  scrapedAt    DateTime?
+  verifiedBy   String?
+  verifiedAt   DateTime?
+
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   savedBy      SavedScholarship[]
   applications Application[]
@@ -69,6 +76,7 @@ model Scholarship {
   @@index([isFeatured])
   @@index([createdAt])
   @@index([deadline])
+  @@index([status])     // ← nouveau
   @@map("scholarships")
 }
 
@@ -140,6 +148,8 @@ model SupportTicket {
   @@map("support_tickets")
 }
 
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
 enum Role {
   USER
   ADMIN
@@ -150,6 +160,7 @@ enum StudyLevel {
   BACCALAUREAT
   LICENCE_1
   LICENCE_2
+  LICENCE_3
   LICENCE
   MAITRISE
   MASTER_1
@@ -167,6 +178,12 @@ enum ScholarshipType {
   FORMATION
 }
 
+enum ScholarshipStatus {
+  PENDING    // scrapée, en attente de validation admin
+  APPROVED   // validée et visible dans l'app
+  REJECTED   // rejetée
+}
+
 enum ApplicationStatus {
   SAVED
   EN_COURS
@@ -181,6 +198,7 @@ enum NotificationType {
   APPLICATION_UPDATE
   SUPPORT_REPLY
   SYSTEM
+  EVENING_REMINDER   // ← nouveau pour le cron 20h
 }
 
 enum TicketStatus {

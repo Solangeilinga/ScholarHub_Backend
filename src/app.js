@@ -16,7 +16,7 @@ const logger = require('./utils/logger');
 const { startCronJobs } = require('./jobs/cron');
 const chatRoutes = require('./modules/chat/chat.routes');
 const supportRoutes = require('./modules/support/support.routes');
-
+const scraperRoutes = require('./modules/scraper/scraper.routes')
 
 const app = express();
 
@@ -64,6 +64,10 @@ app.get('/health', (req, res) => {
 
 //chatbot route
 app.use('/api/chat', chatRoutes);
+
+
+//scraping bourses
+app.use('/api/admin/scraper', scraperRoutes)
 
 //support route
 
