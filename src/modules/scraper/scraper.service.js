@@ -1,14 +1,19 @@
 const prisma = require('../../config/db')
 const logger = require('../../utils/logger')
-const OpportunitesAfriqueScraper = require('./scrapers/opportunites-afrique')
-const CampusFranceScraper = require('./scrapers/campus-france')
 const DAADScraper = require('./scrapers/daad')
+const OpportunityDeskScraper = require('./scrapers/opportunitydesk')
+const AfterSchoolAfricaScraper = require('./scrapers/afterschoolafrica')
+const ScholarshipDBScraper = require('./scrapers/scholarshipdb')
+const Scholars4DevScraper = require('./scrapers/scholars4dev')
 
 const SCRAPERS = [
-  new OpportunitesAfriqueScraper(),
-  new CampusFranceScraper(),
+  new OpportunityDeskScraper(),
+  new AfterSchoolAfricaScraper(),
+  new ScholarshipDBScraper(),
+  new Scholars4DevScraper(),
   new DAADScraper(),
 ]
+
 
 const runScraping = async () => {
   logger.info('🔍 Démarrage du scraping automatique...')
