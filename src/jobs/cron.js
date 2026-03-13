@@ -227,7 +227,7 @@ const startCronJobs = () => {
   cron.schedule('0 9 * * *', notifyNewScholarships, { timezone: 'Africa/Abidjan' });
   cron.schedule('0 20 * * *', sendEveningReminder, { timezone: 'Africa/Abidjan' });
   cron.schedule('0 3 * * *', runDailyScraping, { timezone: 'Africa/Abidjan' }); // 🆕 3h du matin
-  logger.info('🔄 Cron jobs démarrés (3h scraping, 8h deadlines, 9h nouvelles bourses, 20h soir)');
+  logger.info('🔄 Cron jobs démarrés (3h scraping, 8h deadlines, 9h nouvelles bourses, 20h le soir)');
 };
 
 module.exports = { startCronJobs };
