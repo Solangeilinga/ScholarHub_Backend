@@ -20,6 +20,12 @@ router.get('/', async (req, res, next) => {
 // PATCH - Marquer une notification comme lue
 router.patch('/:id/read', async (req, res, next) => {
   try {
+    const notification = await prisma.notification.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
+    });
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification non trouvée' });
+    }
     await prisma.notification.update({
       where: { id: req.params.id },
       data: { isRead: true },

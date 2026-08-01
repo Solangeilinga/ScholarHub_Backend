@@ -60,7 +60,7 @@ const login = async ({ email, password }) => {
     throw new AppError('Email ou mot de passe incorrect', 401);
   }
 
-  const { passwordHash, verificationToken, resetPasswordToken, ...userSafe } = user;
+  const { passwordHash, verificationToken, resetPasswordToken, resetPasswordTokenExpiresAt, ...userSafe } = user;
   const token = generateToken(user.id);
 
   return { user: userSafe, token };
@@ -85,9 +85,10 @@ const forgotPassword = async (email) => {
   if (!user) return; // Silent fail for security
 
   const resetToken = uuidv4();
+  const resetPasswordTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
   await prisma.user.update({
     where: { id: user.id },
-    data: { resetPasswordToken: resetToken },
+    data: { resetPasswordToken: resetToken, resetPasswordTokenExpiresAt },
   });
 
   await sendEmail({
@@ -108,10 +109,14 @@ const resetPassword = async (token, password) => {
   const user = await prisma.user.findFirst({ where: { resetPasswordToken: token } });
   if (!user) throw new AppError('Token invalide ou expiré', 400);
 
+  if (!user.resetPasswordTokenExpiresAt || user.resetPasswordTokenExpiresAt < new Date()) {
+    throw new AppError('Ce lien a expiré, veuillez refaire une demande', 400);
+  }
+
   const passwordHash = await bcrypt.hash(password, 12);
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash, resetPasswordToken: null },
+    data: { passwordHash, resetPasswordToken: null, resetPasswordTokenExpiresAt: null },
   });
 };
 

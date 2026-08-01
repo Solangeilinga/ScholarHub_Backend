@@ -1,19 +1,17 @@
-const sgMail = require('@sendgrid/mail');
+const { Resend } = require('resend');
 const logger = require('./logger');
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendEmail = async ({ to, subject, html }) => {
   try {
-    await sgMail.send({
+    const { error } = await resend.emails.send({
+      from: `ScholarHub <${process.env.EMAIL_FROM || 'onboarding@resend.dev'}>`,
       to,
-      from: {
-        email: process.env.SENDGRID_FROM,
-        name: 'ScholarHub',
-      },
       subject,
       html,
     });
+    if (error) throw new Error(error.message || JSON.stringify(error));
     logger.info(`✅ Email envoyé à ${to}`);
   } catch (error) {
     logger.error(`Erreur envoi email à ${to}: ${error.message}`);

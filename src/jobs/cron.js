@@ -91,7 +91,7 @@ const notifyNewScholarships = async () => {
   for (const user of users) {
     const relevant = newScholarships.filter((s) =>
       (!user.country || s.countries.includes(user.country) || s.countries.length === 0) &&
-      (!user.level || s.level.includes(user.level))
+      (!user.level || s.level.includes(user.level) || s.level.length === 0)
     );
 
     if (relevant.length === 0) continue;

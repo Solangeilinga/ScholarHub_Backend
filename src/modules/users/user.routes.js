@@ -11,6 +11,6 @@ router.put('/change-password', userController.changePassword);
 router.delete('/account', userController.deleteAccount);
 router.get('/saved', userController.getSaved);
 router.get('/applications', userController.getApplications);
-router.put('/fcm-token', userController.updateFcmToken);
+router.patch('/fcm-token', userController.updateFcmToken);
 
 module.exports = router;

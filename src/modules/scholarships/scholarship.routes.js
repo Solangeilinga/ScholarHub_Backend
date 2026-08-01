@@ -7,6 +7,7 @@ const { authenticate, requireAdmin } = require('../../middlewares/auth.middlewar
 router.get('/', scholarshipController.getAll);
 router.get('/featured', scholarshipController.getFeatured);
 router.get('/stats', scholarshipController.getStats);
+router.get('/admin/all', authenticate, requireAdmin, scholarshipController.getAllAdmin);
 
 // Protected routes
 router.get('/user/recommended', authenticate, scholarshipController.getRecommended);

@@ -6,6 +6,7 @@ const prisma = require('../../config/db');
 const { authenticate, requireAdmin } = require('../../middlewares/auth.middleware');
 const { AppError } = require('../../middlewares/error.middleware');
 const { sendEmail } = require('../../utils/mailer');
+const authService = require('../auth/auth.service');
 
 router.use(authenticate, requireAdmin);
 
@@ -148,6 +149,18 @@ router.patch('/users/:id/role', async (req, res, next) => {
       select: { id: true, name: true, email: true, role: true },
     });
     res.json({ user });
+  } catch (error) { next(error); }
+});
+
+// Envoyer un lien de réinitialisation de mot de passe à un utilisateur
+// (utile pour le support quand un utilisateur est bloqué)
+router.post('/users/:id/reset-password', async (req, res, next) => {
+  try {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) throw new AppError('Utilisateur introuvable', 404);
+
+    await authService.forgotPassword(target.email);
+    res.json({ message: `Lien de réinitialisation envoyé à ${target.email}` });
   } catch (error) { next(error); }
 });
 
