@@ -21,11 +21,11 @@ router.get('/stats', authenticate, requireAdmin, async (req, res) => {
   res.json({ stats })
 })
 
-// Bourses en attente de validation
+// Bourses en attente de validation (les moins fiables d'abord, à vérifier en priorité)
 router.get('/pending', authenticate, requireAdmin, async (req, res) => {
   const scholarships = await prisma.scholarship.findMany({
     where: { status: 'PENDING' },
-    orderBy: { scrapedAt: 'desc' },
+    orderBy: [{ confidenceScore: 'asc' }, { scrapedAt: 'desc' }],
   })
   res.json({ scholarships })
 })

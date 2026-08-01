@@ -6,9 +6,9 @@ class OpportunityDeskScraper extends BaseScraper {
     super('OpportunityDesk', 'https://opportunitydesk.org')
   }
 
-  async scrape() {
-    logger.info(`[${this.name}] Début du scraping...`)
-    const scholarships = []
+  async scrapeLinks() {
+    logger.info(`[${this.name}] Recherche de liens candidats...`)
+    const links = []
 
     const urls = [
       `${this.baseUrl}/category/scholarships/`,
@@ -21,59 +21,21 @@ class OpportunityDeskScraper extends BaseScraper {
       if (!$) continue
 
       $('article, .post').each((_, el) => {
-        try {
-          const title = $(el).find('h2 a, h3 a, .entry-title a').first().text().trim()
-          const link = $(el).find('h2 a, h3 a, .entry-title a').first().attr('href')
-          const excerpt = $(el).find('.entry-summary, .excerpt, p').first().text().trim()
-          const dateText = $(el).find('time').first().attr('datetime') || ''
-
-          if (!title || title.length < 10) return
-          if (!title.toLowerCase().includes('scholarship') &&
-              !title.toLowerCase().includes('fellowship') &&
-              !title.toLowerCase().includes('bourse') &&
-              !title.toLowerCase().includes('grant')) return
-
-          scholarships.push({
-            title: title.substring(0, 200),
-            description: excerpt || title,
-            provider: this.extractProvider(title) || 'OpportunityDesk',
-            link: link || url,
-            countries: this.parseCountries(title + ' ' + excerpt),
-            level: this.parseLevel(title + ' ' + excerpt),
-            type: this.parseType(title + ' ' + excerpt),
-            languages: this.parseLanguages(title + ' ' + excerpt),
-            fields: this.parseFields(title + ' ' + excerpt),
-            deadline: this.parseDeadline(dateText) || this.extractDeadlineFromText(excerpt),
-            benefits: [],
-            requirements: null,
-            source: url,
-          })
-        } catch (e) {
-          logger.warn(`[${this.name}] Erreur: ${e.message}`)
-        }
+        const title = $(el).find('h2 a, h3 a, .entry-title a').first().text().trim()
+        const link = $(el).find('h2 a, h3 a, .entry-title a').first().attr('href')
+        if (!title || title.length < 10 || !link) return
+        // Pré-filtre léger : on ne garde que ce qui ressemble à une bourse
+        const lower = title.toLowerCase()
+        if (!lower.includes('scholarship') && !lower.includes('fellowship') &&
+            !lower.includes('bourse') && !lower.includes('grant')) return
+        links.push({ title, link, source: this.name })
       })
 
-      await new Promise(r => setTimeout(r, 2000))
+      await new Promise((r) => setTimeout(r, 1500))
     }
 
-    logger.info(`[${this.name}] ${scholarships.length} bourses collectées`)
-    return scholarships
-  }
-
-  extractProvider(title) {
-    const providers = ['Erasmus', 'UNESCO', 'DAAD', 'Fulbright', 'Commonwealth', 'Chevening', 'Mastercard', 'Gates Foundation', 'World Bank', 'African Development', 'USAID', 'British Council']
-    for (const p of providers) {
-      if (title.includes(p)) return p
-    }
-    return null
-  }
-
-  extractDeadlineFromText(text) {
-    if (!text) return null
-    const match = text.match(/deadline[:\s]+([A-Za-z]+ \d{1,2},?\s*\d{4})/i) ||
-      text.match(/closes?\s+(?:on\s+)?([A-Za-z]+ \d{1,2},?\s*\d{4})/i) ||
-      text.match(/(\d{1,2}\s+[A-Za-z]+\s+\d{4})/i)
-    return match ? this.parseDeadline(match[1]) : null
+    logger.info(`[${this.name}] ${links.length} liens candidats trouvés`)
+    return links
   }
 }
 

@@ -1,12 +1,18 @@
 const prisma = require('../../config/db')
 const logger = require('../../utils/logger')
+
 const DAADScraper = require('./scrapers/daad')
 const OpportunityDeskScraper = require('./scrapers/opportunitydesk')
 const AfterSchoolAfricaScraper = require('./scrapers/afterschoolafrica')
 const ScholarshipDBScraper = require('./scrapers/scholarshipdb')
 const Scholars4DevScraper = require('./scrapers/scholars4dev')
 
-const SCRAPERS = [
+const { discoverCandidates } = require('./services/google-discovery')
+const { fetchCleanText } = require('./services/page-fetcher')
+const { extractScholarship } = require('./services/ai-extractor')
+const { ALL_AFRICAN_COUNTRY_CODES } = require('./services/constants')
+
+const LISTING_SCRAPERS = [
   new OpportunityDeskScraper(),
   new AfterSchoolAfricaScraper(),
   new ScholarshipDBScraper(),
@@ -14,82 +20,210 @@ const SCRAPERS = [
   new DAADScraper(),
 ]
 
+// Nombre de pages traitées en parallèle (fetch + appel IA) — on reste prudent
+// pour ne pas se faire bloquer par les sites sources ni dépasser les quotas API.
+const CONCURRENCY = 4
+// Sécurité anti-emballement : plafond de candidats traités par exécution.
+const MAX_CANDIDATES_PER_RUN = parseInt(process.env.SCRAPER_MAX_CANDIDATES || '150', 10)
 
-const runScraping = async () => {
-  logger.info('🔍 Démarrage du scraping automatique...')
-  const results = { total: 0, inserted: 0, duplicates: 0, errors: 0 }
+function normalizeLink(link) {
+  try {
+    const u = new URL(link)
+    u.hash = ''
+    u.search = ''
+    return u.toString().replace(/\/$/, '').toLowerCase()
+  } catch {
+    return link.toLowerCase().trim()
+  }
+}
 
-  for (const scraper of SCRAPERS) {
+async function collectCandidateLinks() {
+  const all = []
+
+  // 1. Sources connues (sites spécialisés bourses)
+  for (const scraper of LISTING_SCRAPERS) {
     try {
-      const scholarships = await scraper.scrape()
-      results.total += scholarships.length
-
-      for (const s of scholarships) {
-        try {
-          // Vérifier doublon par titre + provider
-          const existing = await prisma.scholarship.findFirst({
-            where: {
-              title: { equals: s.title, mode: 'insensitive' },
-              provider: { equals: s.provider, mode: 'insensitive' },
-            },
-          })
-
-          if (existing) {
-            results.duplicates++
-            continue
-          }
-
-          // Ignorer si pas de deadline valide
-          if (!s.deadline) {
-            // Mettre une deadline par défaut à 3 mois
-            s.deadline = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
-          }
-
-          await prisma.scholarship.create({
-            data: {
-              title: s.title,
-              description: s.description,
-              provider: s.provider,
-              link: s.link,
-              countries: s.countries || [],
-              level: s.level || ['MASTER'],
-              fields: s.fields || [],
-              type: s.type || 'COMPLETE',
-              languages: s.languages || ['FR'],
-              deadline: s.deadline,
-              benefits: s.benefits || [],
-              requirements: s.requirements || null,
-              source: s.source,
-              scrapedAt: new Date(),
-              status: 'PENDING',   // ← En attente de validation admin
-              isActive: false,     // ← Pas visible dans l'app tant que non approuvé
-            },
-          })
-
-          results.inserted++
-        } catch (e) {
-          results.errors++
-          logger.warn(`Erreur insertion "${s.title}": ${e.message}`)
-        }
-      }
+      const links = await scraper.scrapeLinks()
+      all.push(...links)
     } catch (e) {
-      results.errors++
-      logger.error(`Erreur scraper ${scraper.name}: ${e.message}`)
+      logger.error(`[scraper.service] Erreur listing ${scraper.name}: ${e.message}`)
     }
   }
 
-  logger.info(`✅ Scraping terminé — Total: ${results.total}, Insérées: ${results.inserted}, Doublons: ${results.duplicates}, Erreurs: ${results.errors}`)
+  // 2. Découverte élargie via Google Custom Search (nouvelles sources non répertoriées)
+  try {
+    const discovered = await discoverCandidates()
+    all.push(...discovered)
+  } catch (e) {
+    logger.error(`[scraper.service] Erreur google-discovery: ${e.message}`)
+  }
+
+  // Déduplication par URL normalisée
+  const seen = new Set()
+  const deduped = []
+  for (const c of all) {
+    const key = normalizeLink(c.link)
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push({ ...c, normalizedLink: key })
+  }
+  return deduped
+}
+
+async function filterAlreadyKnown(candidates) {
+  const existingLinks = await prisma.scholarship.findMany({ select: { link: true } })
+  const knownSet = new Set(existingLinks.map((s) => normalizeLink(s.link)))
+  return candidates.filter((c) => !knownSet.has(c.normalizedLink))
+}
+
+// Petit pool de concurrence maison (évite d'ajouter une dépendance externe)
+async function runWithConcurrency(items, worker, limit) {
+  const results = []
+  let index = 0
+  async function next() {
+    while (index < items.length) {
+      const current = items[index++]
+      results.push(await worker(current))
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, next))
+  return results
+}
+
+function expandCountries(countries) {
+  if (Array.isArray(countries) && countries.includes('ALL_AFRICA')) {
+    return ALL_AFRICAN_COUNTRY_CODES
+  }
+  return countries || []
+}
+
+const runScraping = async () => {
+  logger.info('🔍 Démarrage du scraping automatique (pipeline IA)...')
+  const results = {
+    candidatesFound: 0,
+    alreadyKnown: 0,
+    processed: 0,
+    inserted: 0,
+    notAScholarship: 0,
+    duplicates: 0,
+    lowConfidenceInserted: 0,
+    errors: 0,
+  }
+
+  const candidates = await collectCandidateLinks()
+  results.candidatesFound = candidates.length
+
+  const newCandidates = await filterAlreadyKnown(candidates)
+  results.alreadyKnown = candidates.length - newCandidates.length
+
+  const toProcess = newCandidates.slice(0, MAX_CANDIDATES_PER_RUN)
+  logger.info(`[scraper.service] ${toProcess.length} nouvelles pages à analyser (sur ${newCandidates.length} candidates, plafond ${MAX_CANDIDATES_PER_RUN})`)
+
+  await runWithConcurrency(toProcess, async (candidate) => {
+    try {
+      const page = await fetchCleanText(candidate.link)
+      if (!page) {
+        results.errors++
+        return
+      }
+
+      const extracted = await extractScholarship({
+        url: candidate.link,
+        pageTitle: page.title || candidate.title,
+        text: page.text,
+      })
+
+      results.processed++
+
+      if (!extracted) {
+        results.notAScholarship++
+        return
+      }
+
+      // Anti-doublon sémantique : même titre + même provider déjà en base
+      const existing = await prisma.scholarship.findFirst({
+        where: {
+          title: { equals: extracted.title, mode: 'insensitive' },
+          provider: { equals: extracted.provider, mode: 'insensitive' },
+        },
+      })
+      if (existing) {
+        results.duplicates++
+        return
+      }
+
+      let deadline = extracted.deadline
+      let extractionNotes = extracted.extractionNotes
+      let confidenceScore = extracted.confidenceScore
+      if (!deadline) {
+        // On ne peut pas laisser le champ vide (contrainte de schéma) mais on
+        // le signale clairement au lieu de le faire passer pour une vraie date.
+        deadline = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+        confidenceScore = Math.min(confidenceScore, 0.35)
+        extractionNotes = [extractionNotes, 'Deadline non trouvée sur la page — valeur provisoire (+90j), à vérifier manuellement.']
+          .filter(Boolean).join(' | ')
+      }
+
+      await prisma.scholarship.create({
+        data: {
+          title: extracted.title,
+          description: extracted.description,
+          provider: extracted.provider,
+          link: candidate.link,
+          countries: expandCountries(extracted.countries),
+          level: extracted.level.length ? extracted.level : [],
+          fields: extracted.fields,
+          type: extracted.type,
+          languages: extracted.languages.length ? extracted.languages : [],
+          amount: extracted.amount,
+          currency: extracted.currency || 'USD',
+          deadline,
+          benefits: extracted.benefits,
+          requirements: extracted.requirements,
+          source: candidate.source,
+          scrapedAt: new Date(),
+          status: 'PENDING',
+          isActive: false,
+          confidenceScore,
+          rawExcerpt: extracted.rawExcerpt,
+          extractionNotes,
+        },
+      })
+
+      results.inserted++
+      if (confidenceScore < 0.5) results.lowConfidenceInserted++
+    } catch (e) {
+      results.errors++
+      logger.warn(`[scraper.service] Erreur traitement "${candidate.link}": ${e.message}`)
+    }
+  }, CONCURRENCY)
+
+  logger.info(
+    `✅ Scraping IA terminé — Candidats: ${results.candidatesFound}, Déjà connus: ${results.alreadyKnown}, ` +
+    `Analysés: ${results.processed}, Insérés: ${results.inserted} (dont ${results.lowConfidenceInserted} à faible confiance), ` +
+    `Non-bourses: ${results.notAScholarship}, Doublons: ${results.duplicates}, Erreurs: ${results.errors}`
+  )
   return results
 }
 
 const getScrapingStats = async () => {
-  const [pending, approved, rejected, total] = await Promise.all([
+  const [pending, approved, rejected, total, avgConfidence] = await Promise.all([
     prisma.scholarship.count({ where: { status: 'PENDING' } }),
     prisma.scholarship.count({ where: { status: 'APPROVED' } }),
     prisma.scholarship.count({ where: { status: 'REJECTED' } }),
     prisma.scholarship.count({ where: { scrapedAt: { not: null } } }),
+    prisma.scholarship.aggregate({
+      where: { scrapedAt: { not: null }, confidenceScore: { not: null } },
+      _avg: { confidenceScore: true },
+    }),
   ])
-  return { pending, approved, rejected, total }
+  return {
+    pending,
+    approved,
+    rejected,
+    total,
+    avgConfidence: avgConfidence._avg.confidenceScore,
+  }
 }
 
 module.exports = { runScraping, getScrapingStats }

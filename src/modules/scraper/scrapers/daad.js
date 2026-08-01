@@ -6,45 +6,24 @@ class DAADScraper extends BaseScraper {
     super('DAAD', 'https://www.daad.de')
   }
 
-  async scrape() {
-    logger.info(`[${this.name}] Début du scraping...`)
-    const scholarships = []
+  async scrapeLinks() {
+    logger.info(`[${this.name}] Recherche de liens candidats...`)
+    const links = []
 
     const url = 'https://www.daad.de/en/studying-in-germany/scholarships/daad-scholarships/'
     const $ = await this.fetchPage(url)
-    if (!$) return scholarships
+    if (!$) return links
 
     $('[class*="teaser"], [class*="card"], article, .scholarship-item').each((_, el) => {
-      try {
-        const title = $(el).find('h2, h3, h4, [class*="title"]').first().text().trim()
-        const link = $(el).find('a').first().attr('href')
-        const desc = $(el).find('p, [class*="desc"], [class*="text"]').first().text().trim()
-
-        if (!title || title.length < 5) return
-
-        const fullLink = link?.startsWith('http') ? link : `https://www.daad.de${link}`
-
-        scholarships.push({
-          title: title.substring(0, 200),
-          description: desc || title,
-          provider: 'DAAD',
-          link: fullLink || url,
-          countries: ['BF', 'CI', 'SN', 'ML', 'GN', 'TG', 'BJ', 'NE', 'CM', 'CD', 'GH', 'NG', 'KE', 'ET', 'ZA', 'MA', 'TN', 'DZ', 'EG'],
-          level: this.parseLevel(title + ' ' + desc),
-          type: 'COMPLETE',
-          languages: ['en', 'fr'],
-          deadline: null,
-          benefits: ['Frais de scolarité couverts', 'Allocation mensuelle', 'Assurance maladie'],
-          requirements: null,
-          source: url,
-        })
-      } catch (e) {
-        logger.warn(`[${this.name}] Erreur: ${e.message}`)
-      }
+      const title = $(el).find('h2, h3, h4, [class*="title"]').first().text().trim()
+      const href = $(el).find('a').first().attr('href')
+      if (!title || title.length < 5 || !href) return
+      const fullLink = href.startsWith('http') ? href : `https://www.daad.de${href}`
+      links.push({ title, link: fullLink, source: this.name })
     })
 
-    logger.info(`[${this.name}] ${scholarships.length} bourses collectées`)
-    return scholarships
+    logger.info(`[${this.name}] ${links.length} liens candidats trouvés`)
+    return links
   }
 }
 

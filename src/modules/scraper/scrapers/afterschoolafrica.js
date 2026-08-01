@@ -6,9 +6,11 @@ class AfterSchoolAfricaScraper extends BaseScraper {
     super('AfterSchoolAfrica', 'https://www.afterschoolafrica.com')
   }
 
-  async scrape() {
-    logger.info(`[${this.name}] Début du scraping...`)
-    const scholarships = []
+  // Ne retourne QUE des liens candidats {title, link, source} —
+  // l'extraction fine des données se fait ensuite par l'IA sur la page détail.
+  async scrapeLinks() {
+    logger.info(`[${this.name}] Recherche de liens candidats...`)
+    const links = []
 
     const urls = [
       `${this.baseUrl}/category/scholarships/`,
@@ -21,55 +23,17 @@ class AfterSchoolAfricaScraper extends BaseScraper {
       if (!$) continue
 
       $('article, .post, .entry').each((_, el) => {
-        try {
-          const title = $(el).find('h2 a, h3 a, .entry-title a').first().text().trim()
-          const link = $(el).find('h2 a, h3 a, .entry-title a').first().attr('href')
-          const excerpt = $(el).find('.entry-summary, .excerpt, p').first().text().trim()
-          const dateText = $(el).find('time, .entry-date').first().attr('datetime') || ''
-
-          if (!title || title.length < 10) return
-
-          scholarships.push({
-            title: title.substring(0, 200),
-            description: excerpt || title,
-            provider: this.extractProvider(title) || 'AfterSchoolAfrica',
-            link: link || url,
-            countries: this.parseCountries(title + ' ' + excerpt),
-            level: this.parseLevel(title + ' ' + excerpt),
-            type: this.parseType(title + ' ' + excerpt),
-            languages: this.parseLanguages(title + ' ' + excerpt),
-            fields: this.parseFields(title + ' ' + excerpt),
-            deadline: this.parseDeadline(dateText) || this.extractDeadlineFromText(excerpt),
-            benefits: [],
-            requirements: null,
-            source: url,
-          })
-        } catch (e) {
-          logger.warn(`[${this.name}] Erreur: ${e.message}`)
-        }
+        const title = $(el).find('h2 a, h3 a, .entry-title a').first().text().trim()
+        const link = $(el).find('h2 a, h3 a, .entry-title a').first().attr('href')
+        if (!title || title.length < 10 || !link) return
+        links.push({ title, link, source: this.name })
       })
 
-      await new Promise(r => setTimeout(r, 2000))
+      await new Promise((r) => setTimeout(r, 1500))
     }
 
-    logger.info(`[${this.name}] ${scholarships.length} bourses collectées`)
-    return scholarships
-  }
-
-  extractProvider(title) {
-    const providers = ['Erasmus', 'UNESCO', 'DAAD', 'Fulbright', 'Commonwealth', 'Chevening', 'Mastercard', 'Gates', 'World Bank', 'AU ', 'African Union']
-    for (const p of providers) {
-      if (title.includes(p)) return p
-    }
-    return null
-  }
-
-  extractDeadlineFromText(text) {
-    if (!text) return null
-    const match = text.match(/deadline[:\s]+([A-Za-z]+ \d{1,2},?\s*\d{4})/i) ||
-      text.match(/closes?\s+(?:on\s+)?([A-Za-z]+ \d{1,2},?\s*\d{4})/i) ||
-      text.match(/(\d{1,2}\s+[A-Za-z]+\s+\d{4})/i)
-    return match ? this.parseDeadline(match[1]) : null
+    logger.info(`[${this.name}] ${links.length} liens candidats trouvés`)
+    return links
   }
 }
 
