@@ -1,29 +1,5 @@
-const OpenAI = require('openai')
 const logger = require('../../../utils/logger')
-
-// Groq et Gemini exposent tous les deux une API compatible OpenAI, donc on
-// réutilise le même client, juste avec une baseURL différente. Ordre d'essai :
-// Groq (gratuit, rapide) → Gemini (gratuit, fallback si Groq est en rate-limit
-// ou en panne) → aucun (extraction désactivée si aucune clé n'est configurée).
-const PROVIDERS = [
-  process.env.GROQ_API_KEY && {
-    name: 'Groq (Llama 3.3 70B)',
-    model: 'llama-3.3-70b-versatile',
-    client: new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: 'https://api.groq.com/openai/v1' }),
-  },
-  process.env.GEMINI_API_KEY && {
-    name: 'Gemini 2.0 Flash',
-    model: 'gemini-2.0-flash',
-    client: new OpenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-    }),
-  },
-].filter(Boolean)
-
-if (PROVIDERS.length === 0) {
-  logger.warn('[ai-extractor] Aucune clé IA configurée (GROQ_API_KEY / GEMINI_API_KEY) — extraction désactivée')
-}
+const { completeWithFallback, hasProvider } = require('../../../utils/llm')
 
 const VALID_LEVELS = [
   'BEPC', 'BACCALAUREAT', 'LICENCE_1', 'LICENCE_2', 'LICENCE_3', 'LICENCE',
@@ -69,60 +45,24 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, au format exac
 }`
 
 /**
- * Extrait le premier bloc JSON valide d'une réponse — au cas où un modèle
- * (surtout les open-source via Groq) ignore la consigne "JSON pur" et entoure
- * sa réponse de ```json ... ``` ou de texte explicatif.
- */
-function parseJsonLoose(raw) {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (match) return JSON.parse(match[0])
-    throw new Error('Réponse IA non parsable en JSON')
-  }
-}
-
-/**
- * Appelle les providers IA disponibles dans l'ordre (Groq puis Gemini),
- * et bascule sur le suivant si l'un échoue (rate-limit, panne, etc.).
- */
-async function callWithFallback(messages) {
-  let lastError
-  for (const provider of PROVIDERS) {
-    try {
-      const response = await provider.client.chat.completions.create({
-        model: provider.model,
-        max_tokens: 1200,
-        temperature: 0,
-        response_format: { type: 'json_object' },
-        messages,
-      })
-      return parseJsonLoose(response.choices[0].message.content)
-    } catch (e) {
-      lastError = e
-      logger.warn(`[ai-extractor] ${provider.name} a échoué (${e.message}), essai du provider suivant...`)
-    }
-  }
-  throw lastError || new Error('Aucun provider IA configuré')
-}
-
-/**
  * Envoie le texte nettoyé d'une page à un LLM pour en extraire une bourse
  * structurée, avec un score de confiance explicite.
  * Retourne null si l'IA juge que ce n'est pas une bourse exploitable.
  */
 async function extractScholarship({ url, pageTitle, text }) {
-  if (!text || text.length < 200 || PROVIDERS.length === 0) return null
+  if (!text || text.length < 200 || !hasProvider) return null
 
   try {
-    const parsed = await callWithFallback([
-      { role: 'system', content: SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: `URL source: ${url}\nTitre de page: ${pageTitle || 'inconnu'}\n\nTexte de la page :\n"""\n${text}\n"""`,
-      },
-    ])
+    const parsed = await completeWithFallback({
+      jsonMode: true,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `URL source: ${url}\nTitre de page: ${pageTitle || 'inconnu'}\n\nTexte de la page :\n"""\n${text}\n"""`,
+        },
+      ],
+    })
 
     if (!parsed.isScholarship) return null
 
