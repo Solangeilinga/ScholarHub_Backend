@@ -6,6 +6,9 @@ const OpportunityDeskScraper = require('./scrapers/opportunitydesk')
 const AfterSchoolAfricaScraper = require('./scrapers/afterschoolafrica')
 const ScholarshipDBScraper = require('./scrapers/scholarshipdb')
 const Scholars4DevScraper = require('./scrapers/scholars4dev')
+const AfriCarrieresScraper = require('./scrapers/afri-carrieres')
+const GreatyopScraper = require('./scrapers/greatyop')
+const OpportunitiesForAfricansScraper = require('./scrapers/opportunitiesforafricans')
 
 const { discoverCandidates } = require('./services/google-discovery')
 const { fetchCleanText } = require('./services/page-fetcher')
@@ -18,6 +21,9 @@ const LISTING_SCRAPERS = [
   new ScholarshipDBScraper(),
   new Scholars4DevScraper(),
   new DAADScraper(),
+  new AfriCarrieresScraper(),
+  new GreatyopScraper(),
+  new OpportunitiesForAfricansScraper(),
 ]
 
 // Nombre de pages traitées en parallèle (fetch + appel IA) — on reste prudent
