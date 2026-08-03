@@ -13,9 +13,9 @@ class AfterSchoolAfricaScraper extends BaseScraper {
     const links = []
 
     const urls = [
-      `${this.baseUrl}/category/scholarships/`,
-      `${this.baseUrl}/category/scholarships/page/2/`,
-      `${this.baseUrl}/category/scholarships/page/3/`,
+      `${this.baseUrl}/scholarship/`,
+      `${this.baseUrl}/scholarship/by-country/scholarships-in-africa/`,
+      `${this.baseUrl}/scholarship/page/2/`,
     ]
 
     for (const url of urls) {

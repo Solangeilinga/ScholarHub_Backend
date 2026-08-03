@@ -1,11 +1,8 @@
 const prisma = require('../../config/db')
 const logger = require('../../utils/logger')
 
-const DAADScraper = require('./scrapers/daad')
-const OpportunityDeskScraper = require('./scrapers/opportunitydesk')
-const AfterSchoolAfricaScraper = require('./scrapers/afterschoolafrica')
-const ScholarshipDBScraper = require('./scrapers/scholarshipdb')
 const Scholars4DevScraper = require('./scrapers/scholars4dev')
+const AfterSchoolAfricaScraper = require('./scrapers/afterschoolafrica')
 const AfriCarrieresScraper = require('./scrapers/afri-carrieres')
 const GreatyopScraper = require('./scrapers/greatyop')
 const OpportunitiesForAfricansScraper = require('./scrapers/opportunitiesforafricans')
@@ -15,20 +12,23 @@ const { fetchCleanText } = require('./services/page-fetcher')
 const { extractScholarship } = require('./services/ai-extractor')
 const { ALL_AFRICAN_COUNTRY_CODES } = require('./services/constants')
 
+// OpportunityDesk (404 — page supprimée), ScholarshipDB et DAAD (teaser page,
+// 403 — bloquent maintenant les bots) sont retirés de la liste active.
+// Remplacés avantageusement par Afri-Carrières/Greatyop/OpportunitiesForAfricans
+// qui à eux trois ramènent largement plus de volume. DAAD garde son fichier
+// (à retravailler plus tard sur leur vraie base de données, cf. discussion).
 const LISTING_SCRAPERS = [
-  new OpportunityDeskScraper(),
   new AfterSchoolAfricaScraper(),
-  new ScholarshipDBScraper(),
   new Scholars4DevScraper(),
-  new DAADScraper(),
   new AfriCarrieresScraper(),
   new GreatyopScraper(),
   new OpportunitiesForAfricansScraper(),
 ]
 
-// Nombre de pages traitées en parallèle (fetch + appel IA) — on reste prudent
-// pour ne pas se faire bloquer par les sites sources ni dépasser les quotas API.
-const CONCURRENCY = 4
+// Nombre de pages traitées en parallèle (fetch + appel IA) — volontairement
+// bas car le tier gratuit Groq limite à 12000 tokens/minute ; à 2 en parallèle
+// on reste sous la limite même avec le retry-backoff du module llm.js.
+const CONCURRENCY = 2
 // Sécurité anti-emballement : plafond de candidats traités par exécution.
 const MAX_CANDIDATES_PER_RUN = parseInt(process.env.SCRAPER_MAX_CANDIDATES || '150', 10)
 

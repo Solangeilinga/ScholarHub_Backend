@@ -12,8 +12,8 @@ const PROVIDERS = [
     client: new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: 'https://api.groq.com/openai/v1' }),
   },
   process.env.GEMINI_API_KEY && {
-    name: 'Gemini 2.0 Flash',
-    model: 'gemini-2.0-flash',
+    name: 'Gemini 2.5 Flash',
+    model: 'gemini-2.5-flash',
     client: new OpenAI({
       apiKey: process.env.GEMINI_API_KEY,
       baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
@@ -40,25 +40,49 @@ function parseJsonLoose(raw) {
 }
 
 /**
+ * Extrait un délai d'attente suggéré depuis un message d'erreur de rate-limit
+ * Groq (ex: "Please try again in 4.535s"), sinon retourne un délai par défaut.
+ */
+function extractRetryDelayMs(message, fallbackMs) {
+  const match = /try again in ([\d.]+)s/i.exec(message || '')
+  return match ? Math.ceil(parseFloat(match[1]) * 1000) + 300 : fallbackMs
+}
+
+function isRateLimitError(e) {
+  return e?.status === 429 || /rate limit/i.test(e?.message || '')
+}
+
+/**
  * Appel simple (une seule réponse, pas de tool-calling), avec fallback
  * automatique d'un provider à l'autre en cas d'échec.
+ * Sur une erreur 429 (rate limit), on réessaie d'abord le MÊME provider après
+ * un court délai (c'est transitoire), avant de passer au suivant.
  */
 async function completeWithFallback({ messages, jsonMode = false, maxTokens = 1200 }) {
   let lastError
   for (const provider of PROVIDERS) {
-    try {
-      const response = await provider.client.chat.completions.create({
-        model: provider.model,
-        max_tokens: maxTokens,
-        temperature: 0,
-        ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
-        messages,
-      })
-      const content = response.choices[0].message.content
-      return jsonMode ? parseJsonLoose(content) : content
-    } catch (e) {
-      lastError = e
-      logger.warn(`[llm] ${provider.name} a échoué (${e.message}), essai du provider suivant...`)
+    for (let attempt = 0; attempt <= 1; attempt++) {
+      try {
+        const response = await provider.client.chat.completions.create({
+          model: provider.model,
+          max_tokens: maxTokens,
+          temperature: 0,
+          ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+          messages,
+        })
+        const content = response.choices[0].message.content
+        return jsonMode ? parseJsonLoose(content) : content
+      } catch (e) {
+        lastError = e
+        if (attempt === 0 && isRateLimitError(e)) {
+          const delay = extractRetryDelayMs(e.message, 3000)
+          logger.warn(`[llm] ${provider.name} rate-limited, nouvel essai dans ${delay}ms...`)
+          await new Promise((r) => setTimeout(r, delay))
+          continue
+        }
+        logger.warn(`[llm] ${provider.name} a échoué (${e.message}), essai du provider suivant...`)
+        break
+      }
     }
   }
   throw lastError || new Error('Aucun provider IA configuré')
