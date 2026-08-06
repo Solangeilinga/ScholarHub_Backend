@@ -25,10 +25,23 @@ app.set('trust proxy', 1);
 
 // Security middlewares
 app.use(helmet());
+
+// ✅ Configuration CORS pour WEB + MOBILE
 app.use(cors({
-  origin: true, // ton frontend en prod
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin: true, // Permet toutes les origines (web, mobile, etc.)
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 200
+}));
+
+// ✅ Gérer explicitement les requêtes OPTIONS (preflight)
+app.options('*', cors({
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
 
 // Rate limiting (appliqué seulement aux routes /api)
@@ -36,8 +49,8 @@ const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500,
   message: { error: 'Trop de requêtes, veuillez réessayer plus tard.' },
-  standardHeaders: true, // Retourne X-RateLimit-* headers
-  legacyHeaders: false, // Désactive les headers X-RateLimit obsolètes
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use('/api/', limiter);
 
@@ -51,6 +64,15 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+// ✅ Middleware pour logger les requêtes (debug)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    console.log(`🔍 Preflight OPTIONS pour: ${req.url}`);
+    console.log(`📋 Origin: ${req.headers.origin || 'Mobile App'}`);
+  }
+  next();
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({
@@ -61,19 +83,10 @@ app.get('/health', (req, res) => {
   });
 });
 
-
-//chatbot route
+// Routes
 app.use('/api/chat', chatRoutes);
-
-
-//scraping bourses
-app.use('/api/admin/scraper', scraperRoutes)
-
-//support route
-
+app.use('/api/admin/scraper', scraperRoutes);
 app.use('/api/support', supportRoutes);
-
-// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/scholarships', scholarshipRoutes);
 app.use('/api/users', userRoutes);
