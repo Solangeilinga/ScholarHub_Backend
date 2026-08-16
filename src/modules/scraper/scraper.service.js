@@ -180,6 +180,7 @@ const runScraping = async () => {
           level: extracted.level.length ? extracted.level : [],
           fields: extracted.fields,
           type: extracted.type,
+          typeDetails: extracted.typeDetails,
           languages: extracted.languages.length ? extracted.languages : [],
           amount: extracted.amount,
           currency: extracted.currency || 'USD',

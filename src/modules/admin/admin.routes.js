@@ -7,6 +7,10 @@ const { authenticate, requireAdmin } = require('../../middlewares/auth.middlewar
 const { AppError } = require('../../middlewares/error.middleware');
 const { sendEmail } = require('../../utils/mailer');
 const authService = require('../auth/auth.service');
+const { fetchCleanText } = require('../scraper/services/page-fetcher');
+const { extractScholarship } = require('../scraper/services/ai-extractor');
+const { ALL_AFRICAN_COUNTRY_CODES } = require('../scraper/services/constants');
+const { hasProvider } = require('../../utils/llm');
 
 router.use(authenticate, requireAdmin);
 
@@ -183,6 +187,80 @@ router.delete('/users/:id', async (req, res, next) => {
 
     await prisma.user.delete({ where: { id: req.params.id } });
     res.json({ message: 'Compte supprimé' });
+  } catch (error) { next(error); }
+});
+
+// Pré-remplit le formulaire de création de bourse à partir d'un lien ou d'un
+// texte collé, en réutilisant le même pipeline IA que le scraper automatique.
+router.post('/scholarships/ai-extract', async (req, res, next) => {
+  try {
+    if (!hasProvider) {
+      throw new AppError("Aucun fournisseur IA n'est configuré côté serveur (GROQ_API_KEY / GEMINI_API_KEY).", 503);
+    }
+
+    const { url, rawText } = req.body;
+    const cleanUrl = typeof url === 'string' ? url.trim() : '';
+    const cleanRawText = typeof rawText === 'string' ? rawText.trim() : '';
+
+    if (!cleanUrl && !cleanRawText) {
+      throw new AppError('Fournis un lien ou colle le texte de la bourse à analyser.', 400);
+    }
+
+    let text, pageTitle;
+
+    if (cleanRawText) {
+      if (cleanRawText.length < 150) {
+        throw new AppError('Le texte collé est trop court pour être analysé (150 caractères minimum).', 400);
+      }
+      text = cleanRawText.slice(0, 12000);
+      pageTitle = null;
+    } else {
+      const fetched = await fetchCleanText(cleanUrl);
+      if (!fetched) {
+        throw new AppError('Impossible de récupérer cette page (site inaccessible, bloqué, ou lien invalide).', 422);
+      }
+      text = fetched.text;
+      pageTitle = fetched.title;
+    }
+
+    const extracted = await extractScholarship({
+      url: cleanUrl || 'texte collé manuellement par un administrateur',
+      pageTitle,
+      text,
+    });
+
+    if (!extracted) {
+      throw new AppError("L'IA n'a pas réussi à identifier une bourse d'études exploitable dans ce contenu. Vérifie le lien/texte, ou remplis le formulaire manuellement.", 422);
+    }
+
+    // "ALL_AFRICA" est un raccourci interne au pipeline IA — on l'étend en
+    // vraie liste de codes pays pour que le formulaire coche directement
+    // les bonnes cases, sans que le frontend ait besoin de connaître ce sentinel.
+    const countries = extracted.countries.includes('ALL_AFRICA')
+      ? ALL_AFRICAN_COUNTRY_CODES
+      : extracted.countries;
+
+    res.json({
+      scholarship: {
+        title: extracted.title,
+        provider: extracted.provider,
+        description: extracted.description,
+        requirements: extracted.requirements || '',
+        benefits: Array.isArray(extracted.benefits) ? extracted.benefits.join('\n') : '',
+        link: cleanUrl || '',
+        amount: extracted.amount,
+        currency: extracted.currency,
+        deadline: extracted.deadline,
+        type: extracted.type,
+        typeDetails: extracted.typeDetails,
+        level: extracted.level,
+        countries,
+        fields: extracted.fields,
+        languages: extracted.languages,
+      },
+      confidenceScore: extracted.confidenceScore,
+      issues: extracted.extractionNotes,
+    });
   } catch (error) { next(error); }
 });
 

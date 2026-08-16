@@ -46,6 +46,7 @@ model Scholarship {
   provider     String
   providerLogo String?
   type         ScholarshipType
+  typeDetails  String?           // Précision libre : ex. "Réduction de 50% sur la scolarité, pas d'allocation de vie"
   countries    String[]
   fields       String[]
   level        StudyLevel[]

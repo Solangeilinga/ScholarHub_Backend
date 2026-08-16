@@ -19,6 +19,7 @@ Règles strictes :
 - "deadline" = date ISO 8601 (YYYY-MM-DD) si trouvable et non déjà passée, sinon null.
 - "level" = sous-liste parmi: ${VALID_LEVELS.join(', ')}. Vide si non précisé.
 - "type" = une valeur parmi: ${VALID_TYPES.join(', ')}. Par défaut "COMPLETE" seulement si le texte décrit clairement une bourse complète.
+- "typeDetails" = précision libre en français si le texte décrit une prise en charge qui ne colle pas exactement à une catégorie simple (ex: réduction de X% sur la scolarité sans allocation, exonération partielle, bourse au mérite couvrant seulement certains frais). null si le type est déjà clair et complet sans nuance à ajouter.
 - "amount" = montant numérique si un chiffre précis est donné (sinon null), "currency" = devise ISO (USD, EUR...) si trouvée.
 - "confidence" = ton propre niveau de confiance de 0 à 1 sur la qualité globale de l'extraction (0 = quasi rien de fiable, 1 = toutes les infos clés sont explicites et sourcées dans le texte).
 - "isScholarship" = false si la page ne décrit pas une bourse d'études précise (ex: page d'accueil, liste d'articles, page générique, offre d'emploi, actualité non liée).
@@ -33,6 +34,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, au format exac
   "countries": string[],
   "level": string[],
   "type": string,
+  "typeDetails": string|null,
   "languages": string[],
   "fields": string[],
   "amount": number|null,
@@ -86,6 +88,7 @@ async function extractScholarship({ url, pageTitle, text }) {
       countries: Array.isArray(parsed.countries) ? parsed.countries : [],
       level,
       type,
+      typeDetails: typeof parsed.typeDetails === 'string' ? parsed.typeDetails.slice(0, 500) : null,
       languages: Array.isArray(parsed.languages) ? parsed.languages : [],
       fields: Array.isArray(parsed.fields) ? parsed.fields : [],
       amount: typeof parsed.amount === 'number' ? parsed.amount : null,
