@@ -29,11 +29,10 @@ function getSearchQueries() {
   const year = new Date().getFullYear()
   const nextYear = year + 1
 
-  // Les six requêtes générales historiques sont conservées.
-  // Les requêtes suivantes ciblent des répertoires institutionnels et des
-  // appels publiés par des universités, gouvernements et organismes africains.
-  // Total : 16 requêtes Google CSE par exécution (sur le quota standard de 100/jour).
+  // Couverture multilingue et régionale : Afrique francophone, anglophone,
+  // lusophone, Afrique du Nord, de l'Est, de l'Ouest, centrale et australe.
   return [
+    // Requêtes générales historiques.
     `bourse d'études Afrique ${year} deadline candidature`,
     `scholarship for African students ${year} deadline apply`,
     `bourse master doctorat Afrique ${year}`,
@@ -41,20 +40,42 @@ function getSearchQueries() {
     `bourse gouvernementale étudiants africains ${year}`,
     `scholarship for African students ${nextYear} applications`,
 
-    // Répertoires officiels et programmes institutionnels internationaux.
+    // Répertoires et programmes institutionnels internationaux.
     `site:campusfrance.org CampusBourses bourses étudiants internationaux ${year}`,
     `site:diplomatie.gouv.fr bourses étudiants étrangers appels candidature ${year}`,
     `site:erasmus-plus.ec.europa.eu Erasmus Mundus scholarships applications ${year} ${nextYear}`,
     `site:daad.de scholarships African students ${year} ${nextYear}`,
-    `site:cscuk.fcdo.gov.uk OR site:chevening.org scholarships applications ${year} ${nextYear}`,
-    `site:mastercardfdn.org OR "Mastercard Foundation Scholars Program" university application ${year} ${nextYear}`,
-
-    // Sources africaines : institutions continentales, universités et ministères.
+    `site:chevening.org scholarships applications ${year} ${nextYear}`,
+    `site:mastercardfdn.org "Scholars Program" university application ${year} ${nextYear}`,
     `site:au.int scholarships African Union students applications ${year} ${nextYear}`,
     `site:auf.org bourses étudiants Afrique appels candidature ${year} ${nextYear}`,
+
+    // Afrique de l'Ouest et centrale francophone.
+    `bourses étudiants Burkina Faso Côte d'Ivoire Sénégal Mali Bénin Togo ${year} ${nextYear}`,
+    `appel à candidatures bourse université Afrique francophone master doctorat ${year}`,
+    `bourse gouvernementale Cameroun Gabon Niger Guinée Tchad étudiants ${year} ${nextYear}`,
+
+    // Afrique anglophone, orientale et australe.
+    `scholarships Nigeria Ghana Kenya Uganda Rwanda Tanzania African students ${year} ${nextYear}`,
+    `scholarships South Africa Zambia Zimbabwe Botswana Malawi African students ${year} ${nextYear}`,
+    `East Africa university government scholarships international students ${year} ${nextYear}`,
+
+    // Afrique du Nord et espace lusophone.
+    `bourses Maroc Algérie Tunisie Égypte étudiants africains ${year} ${nextYear}`,
+    `bolsas de estudo Moçambique Angola estudantes africanos ${year} ${nextYear}`,
+
+    // Universités et autorités publiques.
     `African university official website scholarship international African students ${year} ${nextYear}`,
     `African ministry higher education government scholarship call for applications ${year} ${nextYear}`,
   ]
+}
+
+// Google limite chaque page à 10 résultats et l'indexation à 100 résultats
+// maximum par requête. Deux pages donnent jusqu'à 20 résultats par requête.
+function getPagesPerQuery() {
+  const configured = Number.parseInt(process.env.GOOGLE_CSE_PAGES_PER_QUERY || '2', 10)
+  if (!Number.isFinite(configured)) return 2
+  return Math.min(10, Math.max(1, configured))
 }
 
 function isExcluded(url) {
@@ -77,30 +98,45 @@ async function discoverCandidates() {
 
   const candidates = []
 
-  for (const query of getSearchQueries()) {
-    try {
-      const { data } = await axios.get(ENDPOINT, {
-        params: { key: apiKey, cx, q: query, num: 10 },
-        timeout: 15000,
-      })
+  const pagesPerQuery = getPagesPerQuery()
+  const queries = getSearchQueries()
+  let requestsMade = 0
 
-      for (const item of data.items || []) {
-        if (!item.link || isExcluded(item.link)) continue
-        candidates.push({
-          title: item.title,
-          link: item.link,
-          source: 'google-discovery',
+  for (const query of queries) {
+    for (let page = 0; page < pagesPerQuery; page++) {
+      const start = page * 10 + 1
+      try {
+        const { data } = await axios.get(ENDPOINT, {
+          params: { key: apiKey, cx, q: query, num: 10, start },
+          timeout: 15000,
         })
-      }
+        requestsMade++
 
-      // Respecter le quota / éviter le rate-limit
-      await new Promise((r) => setTimeout(r, 500))
-    } catch (e) {
-      logger.warn(`[google-discovery] Erreur requête "${query}": ${e.response?.status || ''} ${e.message}`)
+        for (const item of data.items || []) {
+          if (!item.link || isExcluded(item.link)) continue
+          candidates.push({
+            title: item.title,
+            link: item.link,
+            source: 'google-discovery',
+          })
+        }
+
+        // Arrête la pagination si Google n'a plus de page suivante.
+        if (!data.queries?.nextPage?.length || !data.items?.length) break
+
+        // Respecter le quota / éviter le rate-limit.
+        await new Promise((r) => setTimeout(r, 500))
+      } catch (e) {
+        logger.warn(`[google-discovery] Erreur requête page ${page + 1} "${query}": ${e.response?.status || ''} ${e.message}`)
+        break
+      }
     }
   }
 
-  logger.info(`[google-discovery] ${candidates.length} URLs candidates découvertes via Google`)
+  logger.info(
+    `[google-discovery] ${candidates.length} URLs candidates découvertes via Google — ` +
+    `${queries.length} requêtes, ${requestsMade} appels API, ${pagesPerQuery} page(s) max/requête`
+  )
   return candidates
 }
 
