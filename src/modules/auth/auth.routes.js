@@ -1,5 +1,5 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, param } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const authController = require('./auth.controller');
@@ -40,14 +40,14 @@ const registerValidation = [
   body('name').isString().trim().isLength({ min: 2, max: 100 }).withMessage('Le nom doit contenir entre 2 et 100 caractères'),
   body('email').isEmail().normalizeEmail().withMessage('Email invalide'),
   body('password')
-    .isLength({ min: 8 }).withMessage('Mot de passe minimum 8 caractères')
+    .isLength({ min: 8, max: 128 }).withMessage('Le mot de passe doit contenir entre 8 et 128 caractères')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Le mot de passe doit contenir majuscule, minuscule et chiffre'),
 ];
 
 const loginValidation = [
   body('email').isEmail().normalizeEmail().withMessage('Email invalide'),
-  body('password').notEmpty().withMessage('Mot de passe requis'),
+  body('password').isString().isLength({ min: 1, max: 128 }).withMessage('Mot de passe invalide'),
 ];
 
 router.post('/register', registerLimiter, registerValidation, authController.register);
@@ -56,13 +56,14 @@ router.post('/logout', authenticate, authController.logout);
 router.get('/me', authenticate, authController.getMe);
 router.post('/forgot-password', passwordResetLimiter, body('email').isEmail().normalizeEmail(), authController.forgotPassword);
 router.post('/reset-password', passwordResetLimiter, [
-  body('token').isString().trim().notEmpty().withMessage('Token requis'),
+  body('token').isUUID(4).withMessage('Token invalide'),
   body('password')
-    .isLength({ min: 8 }).withMessage('Mot de passe minimum 8 caractères')
+    .isString()
+    .isLength({ min: 8, max: 128 }).withMessage('Le mot de passe doit contenir entre 8 et 128 caractères')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Le mot de passe doit contenir majuscule, minuscule et chiffre'),
 ], authController.resetPassword);
-router.get('/verify-email/:token', authController.verifyEmail);
+router.get('/verify-email/:token', param('token').isUUID(4), authController.verifyEmail);
 router.post('/refresh-token', refreshTokenLimiter, authController.refreshToken);
 
 module.exports = router;
