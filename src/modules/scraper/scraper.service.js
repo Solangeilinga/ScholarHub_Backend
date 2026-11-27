@@ -190,7 +190,7 @@ function expandCountries(countries) {
 }
 
 // Seules les sources explicitement reconnues peuvent alimenter la publication
-// automatique. Les autres restent consultables dans la file de modération.
+// automatique. Les annonces qui échouent aux contrôles sont ignorées.
 const TRUSTED_SOURCE_DOMAINS = [
   'campusfrance.org', 'diplomatie.gouv.fr', 'erasmus-plus.ec.europa.eu',
   'daad.de', 'chevening.org', 'mastercardfdn.org', 'au.int', 'auf.org',
@@ -238,7 +238,7 @@ const executeScraping = async () => {
     processed: 0,
     inserted: 0,
     autoPublished: 0,
-    sentToReview: 0,
+    ignoredUnreliable: 0,
     notAScholarship: 0,
     duplicates: 0,
     errors: 0,
@@ -302,25 +302,30 @@ const executeScraping = async () => {
       const extractionIsReliable = hasReliableExtraction(extracted)
       const deadlineIsSafe = !extracted.deadlineWasPast
 
-      // Publication automatique réservée aux domaines reconnus et aux annonces
-      // complètes, cohérentes et non expirées. Toute incertitude = revue humaine.
-      const canAutoPublish = confidenceScore >= 0.90
+      // Publication automatique dès 85 %, sous réserve des contrôles de qualité.
+      // Les annonces qui échouent sont ignorées : aucune validation manuelle.
+      const canAutoPublish = confidenceScore >= 0.85
         && sourceTrust === 'TRUSTED'
         && extractionIsReliable
         && extracted.providerWasExtracted
         && extracted.descriptionWasExtracted
         && extracted.typeIsExplicit
         && deadlineIsSafe
-      const publicationStatus = canAutoPublish ? 'APPROVED' : 'PENDING'
 
-      if (sourceTrust !== 'TRUSTED') {
-        logger.info(`[scraper.service] Source non vérifiée — revue humaine requise : ${candidate.link}`)
-      }
-      if (extracted.deadlineWasPast) {
-        logger.info(`[scraper.service] Annonce avec deadline passée — revue humaine requise : ${candidate.link}`)
-      }
-      if (!extractionIsReliable) {
-        logger.info(`[scraper.service] Informations insuffisantes ou incohérentes — revue humaine requise : ${candidate.link}`)
+      if (!canAutoPublish) {
+        results.ignoredUnreliable++
+        const reasons = []
+        if (confidenceScore < 0.85) reasons.push(`confiance ${Math.round(confidenceScore * 100)}% (<85%)`)
+        if (sourceTrust !== 'TRUSTED') reasons.push('source non reconnue')
+        if (!extractionIsReliable) reasons.push('informations incomplètes ou incohérentes')
+        if (!extracted.providerWasExtracted) reasons.push('organisme non identifié')
+        if (!extracted.descriptionWasExtracted) reasons.push('description insuffisante')
+        if (!extracted.typeIsExplicit) reasons.push('type de financement non confirmé')
+        if (!deadlineIsSafe) reasons.push('date limite déjà passée')
+        logger.info(`[scraper.service] Annonce ignorée (${reasons.join(', ')}) : ${candidate.link}`)
+        const reservationIndex = knownScholarships.indexOf(reservedScholarship)
+        if (reservationIndex !== -1) knownScholarships.splice(reservationIndex, 1)
+        return
       }
 
       await prisma.scholarship.create({
@@ -342,8 +347,8 @@ const executeScraping = async () => {
           requirements: extracted.requirements,
           source: candidate.source,
           scrapedAt: new Date(),
-          status: publicationStatus,
-          isActive: canAutoPublish,
+          status: 'APPROVED',
+          isActive: true,
           confidenceScore,
           rawExcerpt: extracted.rawExcerpt,
           extractionNotes,
@@ -351,9 +356,7 @@ const executeScraping = async () => {
       })
 
       results.inserted++
-      if (canAutoPublish) results.autoPublished++
-      else results.sentToReview++
-      if (confidenceScore < 0.5) results.lowConfidenceInserted++
+      results.autoPublished++
     } catch (e) {
       if (reservedScholarship) {
         const reservationIndex = knownScholarships.indexOf(reservedScholarship)
