@@ -10,6 +10,7 @@ const OpportunitiesForAfricansScraper = require('./scrapers/opportunitiesforafri
 const { discoverCandidates } = require('./services/google-discovery')
 const { fetchCleanText } = require('./services/page-fetcher')
 const { extractScholarship } = require('./services/ai-extractor')
+const { hasProvider: hasAiProvider } = require('../../utils/llm')
 const { ALL_AFRICAN_COUNTRY_CODES } = require('./services/constants')
 
 // OpportunityDesk (404 — page supprimée), ScholarshipDB et DAAD (teaser page,
@@ -30,7 +31,10 @@ const LISTING_SCRAPERS = [
 // on reste sous la limite même avec le retry-backoff du module llm.js.
 const CONCURRENCY = 2
 // Sécurité anti-emballement : plafond de candidats traités par exécution.
-const MAX_CANDIDATES_PER_RUN = parseInt(process.env.SCRAPER_MAX_CANDIDATES || '150', 10)
+const configuredMaxCandidates = Number.parseInt(process.env.SCRAPER_MAX_CANDIDATES || '150', 10)
+const MAX_CANDIDATES_PER_RUN = Number.isFinite(configuredMaxCandidates)
+  ? Math.min(500, Math.max(1, configuredMaxCandidates))
+  : 150
 
 function normalizeLink(link) {
   try {
@@ -222,6 +226,12 @@ function hasReliableExtraction(extracted) {
 
 const executeScraping = async () => {
   logger.info('🔍 Démarrage du scraping automatique (pipeline IA)...')
+  if (!hasAiProvider) {
+    logger.error('[scraper.service] Scraping incomplet : aucune clé GROQ_API_KEY ou GEMINI_API_KEY configurée. Les pages ne pourront pas être extraites.')
+  }
+  if (!process.env.BRAVE_SEARCH_API_KEY && !(process.env.GOOGLE_CSE_API_KEY && process.env.GOOGLE_CSE_CX)) {
+    logger.warn('[scraper.service] Découverte Web élargie désactivée : configurer BRAVE_SEARCH_API_KEY (ou temporairement Google CSE). Les sources intégrées restent actives.')
+  }
   const results = {
     candidatesFound: 0,
     alreadyKnown: 0,
@@ -403,6 +413,15 @@ const getScrapingStats = async () => {
     rejected,
     total,
     avgConfidence: avgConfidence._avg.confidenceScore,
+    automation: {
+      aiExtractionReady: hasAiProvider,
+      webDiscoveryReady: Boolean(process.env.BRAVE_SEARCH_API_KEY || (process.env.GOOGLE_CSE_API_KEY && process.env.GOOGLE_CSE_CX)),
+      discoveryProvider: process.env.BRAVE_SEARCH_API_KEY ? 'BRAVE' :
+        (process.env.GOOGLE_CSE_API_KEY && process.env.GOOGLE_CSE_CX ? 'GOOGLE_CSE' : 'NONE'),
+      activeSources: LISTING_SCRAPERS.map((scraper) => scraper.name),
+      maxCandidatesPerRun: MAX_CANDIDATES_PER_RUN,
+      schedule: 'Tous les jours à 03:00 (Africa/Abidjan)',
+    },
   }
 }
 
