@@ -6,6 +6,15 @@ const { runScraping, getScrapingStats } = require('./scraper.service');
 const { authenticate, requireAdmin } = require('../../middlewares/auth.middleware');
 const logger = require('../../utils/logger');
 
+const scraperRunLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user.id,
+  message: { error: 'Une exécution du scraper a déjà été demandée récemment. Réessayez dans 15 minutes.' },
+});
+
 const asyncHandler = (handler) => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
 };
@@ -23,7 +32,7 @@ const scholarshipIdValidation = [
 ];
 
 // Lancer le scraping manuellement : la tâche s'exécute en arrière-plan.
-router.post('/run', authenticate, requireAdmin, (req, res) => {
+router.post('/run', authenticate, requireAdmin, scraperRunLimiter, (req, res) => {
   res.status(202).json({ message: 'Scraping lancé en arrière-plan' });
   runScraping().catch((error) => {
     logger.error('Échec du scraping manuel', { message: error.message, stack: error.stack });
