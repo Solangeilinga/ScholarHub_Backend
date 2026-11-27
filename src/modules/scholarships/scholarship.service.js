@@ -282,6 +282,26 @@ const getStats = async () => {
   return { total, active, byType };
 };
 
+// Seuls les champs modifiables depuis le formulaire admin sont acceptés.
+// Les champs internes (status, verifiedBy, confidenceScore, rawExcerpt, views, etc.)
+// ne peuvent pas être modifiés par un simple envoi de req.body.
+const EDITABLE_SCHOLARSHIP_FIELDS = [
+  'title', 'description', 'provider', 'providerLogo', 'type', 'typeDetails',
+  'countries', 'fields', 'level', 'amount', 'currency', 'deadline', 'startDate',
+  'duration', 'link', 'requirements', 'benefits', 'languages', 'isActive', 'isFeatured',
+];
+
+const pickEditableScholarshipFields = (input) => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new AppError('Les données de la bourse sont invalides.', 400);
+  }
+  return Object.fromEntries(
+    EDITABLE_SCHOLARSHIP_FIELDS
+      .filter((field) => Object.prototype.hasOwnProperty.call(input, field))
+      .map((field) => [field, input[field]])
+  );
+};
+
 const normalizeExternalUrl = (value, field, required = false) => {
   if (value === undefined || value === null || value === '') {
     if (required) throw new AppError(`Le lien ${field} est obligatoire.`, 400);
@@ -311,23 +331,24 @@ const normalizeExternalUrl = (value, field, required = false) => {
 };
 
 const create = async (data) => {
-  const safeData = {
-    ...data,
-    link: normalizeExternalUrl(data.link, 'de candidature', true),
-  };
-  if (data.providerLogo !== undefined) {
-    safeData.providerLogo = normalizeExternalUrl(data.providerLogo, 'du logo');
+  const safeData = pickEditableScholarshipFields(data);
+  safeData.link = normalizeExternalUrl(safeData.link, 'de candidature', true);
+  if (safeData.providerLogo !== undefined) {
+    safeData.providerLogo = normalizeExternalUrl(safeData.providerLogo, 'du logo');
   }
   return prisma.scholarship.create({ data: safeData });
 };
 
 const update = async (id, data) => {
-  const safeData = { ...data };
-  if (data.link !== undefined) {
-    safeData.link = normalizeExternalUrl(data.link, 'de candidature', true);
+  const safeData = pickEditableScholarshipFields(data);
+  if (Object.keys(safeData).length === 0) {
+    throw new AppError('Aucune information modifiable à enregistrer.', 400);
   }
-  if (data.providerLogo !== undefined) {
-    safeData.providerLogo = normalizeExternalUrl(data.providerLogo, 'du logo');
+  if (safeData.link !== undefined) {
+    safeData.link = normalizeExternalUrl(safeData.link, 'de candidature', true);
+  }
+  if (safeData.providerLogo !== undefined) {
+    safeData.providerLogo = normalizeExternalUrl(safeData.providerLogo, 'du logo');
   }
   return prisma.scholarship.update({ where: { id }, data: safeData });
 };
