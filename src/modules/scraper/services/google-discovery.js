@@ -84,9 +84,16 @@ async function discoverWithBrave(apiKey, queries) {
     for (let page = 0; page < pagesPerQuery && requestsMade < maxRequests; page++) {
       try {
         const { data } = await axios.get(BRAVE_ENDPOINT, {
-          // ALL évite de limiter les résultats au marché américain par défaut.
-          // Brave détecte la langue de chaque requête si search_lang est omis.
-          params: { q: query, count: 20, offset: page, country: 'ALL' },
+          // La langue suit la requête : français, portugais ou anglais.
+          // On ne force pas de pays afin de ne pas exclure les bourses internationales.
+          params: {
+            q: query,
+            count: 20,
+            offset: page,
+            search_lang: /\\b(bolsas|estudo|estudantes)\\b/i.test(query) ? 'pt'
+              : /\\b(bourse|étudiants|études|appel|université|gouvernementale|candidature|bourses)\\b/i.test(query) ? 'fr'
+                : 'en',
+          },
           headers: { 'X-Subscription-Token': apiKey },
           timeout: 15000,
         })
