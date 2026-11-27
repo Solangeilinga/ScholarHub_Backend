@@ -215,7 +215,11 @@ const runDailyScraping = async () => {
   logger.info('🔍 Scraping automatique quotidien...');
   try {
     const results = await runScraping();
-    logger.info(`✅ Scraping terminé — ${results.inserted} nouvelles bourses en attente de validation`);
+    if (results.skipped) {
+      logger.info('⏭️ Scraping quotidien ignoré : une autre exécution est déjà en cours');
+      return;
+    }
+    logger.info(`✅ Scraping terminé — ${results.inserted} nouvelles bourses insérées (${results.autoPublished} publiées automatiquement, ${results.sentToReview} en attente de validation)`);
   } catch (e) {
     logger.error(`❌ Erreur scraping: ${e.message}`);
   }
