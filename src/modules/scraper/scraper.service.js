@@ -241,7 +241,6 @@ const executeScraping = async () => {
     sentToReview: 0,
     notAScholarship: 0,
     duplicates: 0,
-    lowConfidenceInserted: 0,
     errors: 0,
   }
 
@@ -368,7 +367,7 @@ const executeScraping = async () => {
   logger.info(
     `✅ Scraping IA terminé — Candidats: ${results.candidatesFound}, Déjà connus: ${results.alreadyKnown}, ` +
     `Analysés: ${results.processed}, Insérés: ${results.inserted}, Publiés automatiquement: ${results.autoPublished}, ` +
-    `En attente de revue: ${results.sentToReview}, Faible confiance: ${results.lowConfidenceInserted}, ` +
+    `Ignorées (fiabilité insuffisante): ${results.ignoredUnreliable}, ` +
     `Non-bourses: ${results.notAScholarship}, Doublons: ${results.duplicates}, Erreurs: ${results.errors}`
   )
   return results
