@@ -1,5 +1,6 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const prisma = require('../../config/db');
 const { runScraping, getScrapingStats } = require('./scraper.service');
