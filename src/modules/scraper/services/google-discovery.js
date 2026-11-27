@@ -144,13 +144,26 @@ async function discoverCandidates() {
   const queries = getSearchQueries()
   const braveKey = process.env.BRAVE_SEARCH_API_KEY
 
-  // Brave est prioritaire dès qu'une clé est configurée.
-  if (braveKey) return discoverWithBrave(braveKey, queries)
-
-  // Compatibilité temporaire : permet de continuer à fonctionner avant
-  // l'ajout de la clé Brave, sans interrompre le scraping existant.
   const googleKey = process.env.GOOGLE_CSE_API_KEY
   const googleCx = process.env.GOOGLE_CSE_CX
+
+  // Brave est prioritaire dès qu'une clé est configurée.
+  if (braveKey) {
+    const braveCandidates = await discoverWithBrave(braveKey, queries)
+    if (braveCandidates.length > 0) return braveCandidates
+
+    // Si Brave ne renvoie aucun résultat (panne, quota ou réponse vide),
+    // Google peut temporairement prendre le relais si ses identifiants existent.
+    if (googleKey && googleCx) {
+      logger.warn('[web-discovery] Aucun résultat Brave — bascule temporaire vers Google')
+      return discoverWithGoogle(googleKey, googleCx, queries)
+    }
+
+    logger.warn('[web-discovery] Brave n’a renvoyé aucun résultat et aucun secours Google n’est configuré')
+    return []
+  }
+
+  // Compatibilité temporaire avant la configuration de la clé Brave.
   if (googleKey && googleCx) return discoverWithGoogle(googleKey, googleCx, queries)
 
   logger.warn('[web-discovery] Aucune clé Brave ou Google configurée — découverte Web désactivée')
