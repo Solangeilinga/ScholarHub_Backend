@@ -56,7 +56,7 @@ async function collectCandidateLinks() {
     }
   }
 
-  // 2. Découverte élargie via Google Custom Search (nouvelles sources non répertoriées)
+  // 2. Découverte élargie via recherche Web (Brave prioritaire, Google en transition)
   try {
     const discovered = await discoverCandidates()
     all.push(...discovered)
