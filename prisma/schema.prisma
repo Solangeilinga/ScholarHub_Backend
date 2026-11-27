@@ -52,7 +52,7 @@ model Scholarship {
   level        StudyLevel[]
   amount       Float?
   currency     String?           @default("USD")
-  deadline     DateTime
+  deadline     DateTime?
   startDate    DateTime?
   duration     String?
   link         String
