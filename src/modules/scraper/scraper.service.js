@@ -153,7 +153,7 @@ const executeScraping = async () => {
       }
 
       // Anti-doublon sémantique : même titre + même provider en base ou dans ce run.
-      const semanticKey = `${(extracted.title || '').trim().toLowerCase().replace(/\\s+/g, ' ')}::${(extracted.provider || '').trim().toLowerCase().replace(/\\s+/g, ' ')}`
+      const semanticKey = `${(extracted.title || '').trim().toLowerCase().replace(/\s+/g, ' ')}::${(extracted.provider || '').trim().toLowerCase().replace(/\s+/g, ' ')}`
       if (seenSemanticKeys.has(semanticKey)) {
         results.duplicates++
         return
