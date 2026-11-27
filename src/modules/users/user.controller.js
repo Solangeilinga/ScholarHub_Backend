@@ -140,7 +140,14 @@ const getSaved = async (req, res, next) => {
   try {
     const saved = await prisma.savedScholarship.findMany({
       where: { userId: req.user.id },
-      include: { scholarship: true },
+      select: { savedAt: true, scholarship: { select: {
+          id: true, title: true, description: true, provider: true, providerLogo: true,
+          type: true, typeDetails: true, countries: true, fields: true, level: true,
+          amount: true, currency: true, deadline: true, startDate: true, duration: true,
+          link: true, requirements: true, benefits: true, languages: true,
+          isActive: true, isFeatured: true, views: true, status: true,
+          createdAt: true, updatedAt: true,
+        } } },
       orderBy: { savedAt: 'desc' },
     });
     res.json({ saved: saved.map((s) => s.scholarship) });
@@ -151,7 +158,18 @@ const getApplications = async (req, res, next) => {
   try {
     const applications = await prisma.application.findMany({
       where: { userId: req.user.id },
-      include: { scholarship: true },
+      select: {
+        id: true, scholarshipId: true, status: true, notes: true,
+        appliedAt: true, createdAt: true, updatedAt: true,
+        scholarship: { select: {
+          id: true, title: true, description: true, provider: true, providerLogo: true,
+          type: true, typeDetails: true, countries: true, fields: true, level: true,
+          amount: true, currency: true, deadline: true, startDate: true, duration: true,
+          link: true, requirements: true, benefits: true, languages: true,
+          isActive: true, isFeatured: true, views: true, status: true,
+          createdAt: true, updatedAt: true,
+        } },
+      },
       orderBy: { updatedAt: 'desc' },
     });
     res.json({ applications });
