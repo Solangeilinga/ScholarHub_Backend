@@ -380,6 +380,14 @@ const executeScraping = async () => {
  * Pour plusieurs instances serveur, un verrou partagé en base/Redis sera nécessaire.
  */
 let scrapingInProgress = false
+const scrapingRunStatus = {
+  state: 'IDLE',
+  startedAt: null,
+  finishedAt: null,
+  durationMs: null,
+  lastResult: null,
+  lastError: null,
+}
 
 const runScraping = async () => {
   if (scrapingInProgress) {
@@ -388,9 +396,25 @@ const runScraping = async () => {
   }
 
   scrapingInProgress = true
+  scrapingRunStatus.state = 'RUNNING'
+  scrapingRunStatus.startedAt = new Date().toISOString()
+  scrapingRunStatus.finishedAt = null
+  scrapingRunStatus.durationMs = null
+  scrapingRunStatus.lastError = null
+  const startedAtMs = Date.now()
+
   try {
-    return await executeScraping()
+    const result = await executeScraping()
+    scrapingRunStatus.state = 'SUCCEEDED'
+    scrapingRunStatus.lastResult = result
+    return result
+  } catch (error) {
+    scrapingRunStatus.state = 'FAILED'
+    scrapingRunStatus.lastError = error.message || 'Erreur inconnue'
+    throw error
   } finally {
+    scrapingRunStatus.finishedAt = new Date().toISOString()
+    scrapingRunStatus.durationMs = Date.now() - startedAtMs
     scrapingInProgress = false
     logger.info('[scraper.service] Verrou de scraping libéré')
   }
@@ -414,6 +438,14 @@ const getScrapingStats = async () => {
     total,
     avgConfidence: avgConfidence._avg.confidenceScore,
     automation: {
+      run: {
+        state: scrapingRunStatus.state,
+        startedAt: scrapingRunStatus.startedAt,
+        finishedAt: scrapingRunStatus.finishedAt,
+        durationMs: scrapingRunStatus.durationMs,
+        lastResult: scrapingRunStatus.lastResult,
+        lastError: scrapingRunStatus.lastError,
+      },
       aiExtractionReady: hasAiProvider,
       webDiscoveryReady: Boolean(process.env.BRAVE_SEARCH_API_KEY || (process.env.GOOGLE_CSE_API_KEY && process.env.GOOGLE_CSE_CX)),
       discoveryProvider: process.env.BRAVE_SEARCH_API_KEY ? 'BRAVE' :
