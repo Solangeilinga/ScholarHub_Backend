@@ -39,7 +39,27 @@ const TOOLS = [
   },
 ]
 
-async function executeTool(userId, name, args) {
+function validateToolArgs(name, args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return {};
+  if (name !== 'search_scholarships') return {};
+  const safe = {};
+  if (typeof args.country === 'string' && /^[A-Za-z]{2}$/.test(args.country.trim())) {
+    safe.country = args.country.trim().toUpperCase();
+  }
+  if (typeof args.level === 'string' && args.level.trim().length <= 40) {
+    safe.level = args.level.trim().slice(0, 40);
+  }
+  if (typeof args.keyword === 'string' && args.keyword.trim().length > 0) {
+    safe.keyword = args.keyword.trim().slice(0, 80);
+  }
+  if (Number.isInteger(args.limit) && args.limit > 0) {
+    safe.limit = Math.min(args.limit, 5);
+  }
+  return safe;
+}
+
+async function executeTool(userId, name, rawArgs) {
+  const args = validateToolArgs(name, rawArgs);
   if (name === 'search_scholarships') {
     const where = {
       isActive: true,
@@ -57,7 +77,7 @@ async function executeTool(userId, name, args) {
     }
     const results = await prisma.scholarship.findMany({
       where,
-      take: Number.isInteger(args.limit) && args.limit > 0 ? Math.min(args.limit, 10) : 5,
+      take: Number.isInteger(args.limit) && args.limit > 0 ? Math.min(args.limit, 5) : 5,
       orderBy: { deadline: 'asc' },
       select: { id: true, title: true, provider: true, countries: true, level: true, deadline: true, amount: true, currency: true, link: true },
     })
