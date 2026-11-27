@@ -116,6 +116,13 @@ Règles :
 - Si aucune bourse réelle ne correspond, dis-le clairement plutôt que d'en inventer une
 - Reste cohérent avec la langue utilisée par l'utilisateur dans ses messages`
 
+const deleteHistory = async (req, res, next) => {
+  try {
+    await prisma.chatMessage.deleteMany({ where: { userId: req.user.id } });
+    res.json({ message: "Historique du chatbot supprimé" });
+  } catch (error) { next(error); }
+};
+
 const chat = async (req, res) => {
   try {
     const { messages } = req.body
@@ -202,4 +209,4 @@ const getHistory = async (req, res, next) => {
   } catch (error) { next(error) }
 }
 
-module.exports = { chat, getHistory }
+module.exports = { chat, getHistory, deleteHistory }
