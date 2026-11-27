@@ -72,7 +72,8 @@ async function extractScholarship({ url, pageTitle, text }) {
     const level = Array.isArray(parsed.level)
       ? parsed.level.filter((l) => VALID_LEVELS.includes(l))
       : []
-    const type = VALID_TYPES.includes(parsed.type) ? parsed.type : 'COMPLETE'
+    const typeIsExplicit = VALID_TYPES.includes(parsed.type)
+    const type = typeIsExplicit ? parsed.type : 'COMPLETE'
     const deadline = parsed.deadline ? new Date(parsed.deadline) : null
     const validDeadline = deadline && !isNaN(deadline.getTime()) && deadline > new Date() ? deadline : null
     const confidence = typeof parsed.confidence === 'number'
@@ -85,6 +86,9 @@ async function extractScholarship({ url, pageTitle, text }) {
       title: parsed.title.slice(0, 200),
       description: parsed.description || parsed.title,
       provider: parsed.provider || 'Source inconnue',
+      providerWasExtracted: typeof parsed.provider === 'string' && parsed.provider.trim().length >= 2,
+      descriptionWasExtracted: typeof parsed.description === 'string' && parsed.description.trim().length >= 40,
+      typeIsExplicit,
       countries: Array.isArray(parsed.countries) ? parsed.countries : [],
       level,
       type,
