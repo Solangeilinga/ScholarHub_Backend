@@ -1,18 +1,23 @@
 const prisma = require('../../config/db');
 const { sendEmail } = require('../../utils/mailer');
 
+const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[char]));
+
 // Étudiant crée un ticket
 const createTicket = async (req, res) => {
   try {
     const { subject, message } = req.body;
     const userId = req.user.id;
 
-    if (!subject || !message) {
-      return res.status(400).json({ error: 'Sujet et message requis' });
+    if (typeof subject !== 'string' || subject.trim().length < 3 || subject.trim().length > 150 ||
+        typeof message !== 'string' || message.trim().length < 10 || message.trim().length > 5000) {
+      return res.status(400).json({ error: 'Le sujet doit contenir 3 à 150 caractères et le message 10 à 5 000 caractères' });
     }
 
     const ticket = await prisma.supportTicket.create({
-      data: { userId, subject, message },
+      data: { userId, subject: subject.trim(), message: message.trim() },
       include: { user: { select: { name: true, email: true } } },
     });
 
@@ -43,23 +48,13 @@ const deleteTicket = async (req, res) => {
     const userId = req.user.id;
 
     // Vérifier que le ticket existe et appartient à l'utilisateur
-    const ticket = await prisma.supportTicket.findFirst({
-      where: {
-        id: id,
-        userId: userId
-      }
+    const result = await prisma.supportTicket.deleteMany({
+      where: { id, userId },
     });
 
-    if (!ticket) {
+    if (result.count === 0) {
       return res.status(404).json({ error: 'Ticket non trouvé' });
     }
-
-    // ✅ SUPPRIMER LE BLOCK if (ticket.status === 'ANSWERED') { ... }
-
-    // Supprimer le ticket
-    await prisma.supportTicket.delete({
-      where: { id: id }
-    });
 
     res.json({ 
       success: true, 
@@ -135,33 +130,33 @@ const replyTicket = async (req, res) => {
     const { id } = req.params;
     const { reply } = req.body;
 
-    if (!reply) return res.status(400).json({ error: 'Réponse requise' });
+    if (typeof reply !== 'string' || reply.trim().length < 1 || reply.trim().length > 5000) return res.status(400).json({ error: 'La réponse doit contenir entre 1 et 5 000 caractères' });
 
     const ticket = await prisma.supportTicket.update({
       where: { id },
-      data: { reply, status: 'ANSWERED' },
+      data: { reply: reply.trim(), status: 'ANSWERED' },
       include: { user: { select: { name: true, email: true } } },
     });
 
     // Envoyer email à l'étudiant
     await sendEmail({
       to: ticket.user.email,
-      subject: `✅ ScholarHub - Réponse à votre demande : ${ticket.subject}`,
+      subject: `✅ ScholarHub - Réponse à votre demande : ${escapeHtml(ticket.subject)}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #1A1F8F; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 24px;">ScholarHub</h1>
           </div>
           <div style="padding: 30px; background: white; border: 1px solid #eee;">
-            <h2 style="color: #0D0E2E;">Bonjour ${ticket.user.name} 👋</h2>
+            <h2 style="color: #0D0E2E;">Bonjour ${escapeHtml(ticket.user.name)} 👋</h2>
             <p style="color: #6B7280;">Notre équipe a répondu à votre demande :</p>
             <div style="background: #F5F6FF; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #1A1F8F;">
               <p style="font-weight: bold; color: #0D0E2E; margin: 0 0 8px;">Votre question :</p>
-              <p style="color: #6B7280; margin: 0;">${ticket.message}</p>
+              <p style="color: #6B7280; margin: 0;">${escapeHtml(ticket.message)}</p>
             </div>
             <div style="background: #F0FFF4; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #10B981;">
               <p style="font-weight: bold; color: #0D0E2E; margin: 0 0 8px;">Réponse de l'équipe :</p>
-              <p style="color: #374151; margin: 0;">${reply}</p>
+              <p style="color: #374151; margin: 0;">${escapeHtml(reply.trim())}</p>
             </div>
             <p style="color: #6B7280; font-size: 14px;">Si vous avez d'autres questions, n'hésitez pas à nous contacter depuis l'application.</p>
           </div>
