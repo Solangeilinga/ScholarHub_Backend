@@ -5,6 +5,15 @@ const prisma = require('../../config/db');
 const { AppError } = require('../../middlewares/error.middleware');
 const { sendEmail } = require('../../utils/mailer');
 
+const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+})[char]);
+
+
 const generateToken = (userId, tokenVersion = 0) => {
   return jwt.sign({ userId, ver: tokenVersion }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
@@ -36,7 +45,7 @@ const register = async ({ name, email, password, country }) => {
     to: email,
     subject: 'Bienvenue sur ScholarHub - Vérifiez votre email',
     html: `
-      <h2>Bienvenue sur ScholarHub, ${name} !</h2>
+      <h2>Bienvenue sur ScholarHub, ${escapeHtml(name)} !</h2>
       <p>Merci de rejoindre la plateforme de bourses pour étudiants africains.</p>
       <p>Cliquez sur le lien ci-dessous pour vérifier votre email :</p>
       <a href="${process.env.FRONTEND_URL}/verify-email/${verificationToken}" style="background:#6C63FF;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;">
