@@ -13,6 +13,13 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.' },
 });
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de créations de compte depuis cette adresse. Réessayez dans une heure.' },
+});
 const passwordResetLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -21,8 +28,16 @@ const passwordResetLimiter = rateLimit({
   message: { error: 'Trop de demandes. Réessayez dans une heure.' },
 });
 
+const refreshTokenLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de demandes de renouvellement. Réessayez plus tard.' },
+});
+
 const registerValidation = [
-  body('name').trim().notEmpty().withMessage('Le nom est requis'),
+  body('name').isString().trim().isLength({ min: 2, max: 100 }).withMessage('Le nom doit contenir entre 2 et 100 caractères'),
   body('email').isEmail().normalizeEmail().withMessage('Email invalide'),
   body('password')
     .isLength({ min: 8 }).withMessage('Mot de passe minimum 8 caractères')
@@ -35,7 +50,7 @@ const loginValidation = [
   body('password').notEmpty().withMessage('Mot de passe requis'),
 ];
 
-router.post('/register', registerValidation, authController.register);
+router.post('/register', registerLimiter, registerValidation, authController.register);
 router.post('/login', loginLimiter, loginValidation, authController.login);
 router.post('/logout', authenticate, authController.logout);
 router.get('/me', authenticate, authController.getMe);
@@ -48,6 +63,6 @@ router.post('/reset-password', passwordResetLimiter, [
     .withMessage('Le mot de passe doit contenir majuscule, minuscule et chiffre'),
 ], authController.resetPassword);
 router.get('/verify-email/:token', authController.verifyEmail);
-router.post('/refresh-token', authController.refreshToken);
+router.post('/refresh-token', refreshTokenLimiter, authController.refreshToken);
 
 module.exports = router;
