@@ -80,7 +80,7 @@ router.post('/users', async (req, res, next) => {
     const role = req.body.role === undefined ? 'USER' : req.body.role;
 
     if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100 ||
-        !email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+        !email || email.length > 254 || !/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(email) ||
         typeof password !== 'string') {
       throw new AppError('Nom, email valide et mot de passe sont requis', 400);
     }
@@ -114,11 +114,11 @@ router.post('/users', async (req, res, next) => {
 
     await sendEmail({
       to: user.email,
-      subject: 'Votre compte administrateur ScholarHub',
+      subject: 'Votre compte ScholarHub',
       html: `
         <h2>Bienvenue sur ScholarHub, ${escapeHtml(safeName)} !</h2>
         <p>Un compte ${role === 'ADMIN' ? 'administrateur' : 'utilisateur'} vient d'être créé pour vous sur le panel ScholarHub.</p>
-        <p><strong>Email :</strong> ${user.email}<br/>
+        <p><strong>Email :</strong> ${escapeHtml(user.email)}<br/>
         <strong>Mot de passe :</strong> celui qui vous a été communiqué par la personne qui a créé ce compte.</p>
         <p>Nous vous recommandons de changer ce mot de passe dès votre première connexion.</p>
       `,
