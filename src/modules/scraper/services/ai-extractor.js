@@ -76,7 +76,7 @@ async function extractScholarship({ url, pageTitle, text }) {
     const typeIsExplicit = VALID_TYPES.includes(parsed.type)
     const type = typeIsExplicit ? parsed.type : 'COMPLETE'
     const deadlineText = typeof parsed.deadline === 'string' ? parsed.deadline.trim() : ''
-    const isIsoDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(deadlineText)
+    const isIsoDate = /^\d{4}-\d{2}-\d{2}$/.test(deadlineText)
     const deadline = isIsoDate ? new Date(`${deadlineText}T00:00:00.000Z`) : null
     const validDeadline = deadline && !isNaN(deadline.getTime())
       && deadline.toISOString().slice(0, 10) === deadlineText ? deadline : null
