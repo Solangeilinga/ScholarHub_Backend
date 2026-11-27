@@ -72,13 +72,21 @@ function toCandidate(item, source) {
 async function discoverWithBrave(apiKey, queries) {
   const candidates = []
   const pagesPerQuery = getPagesPerQuery('BRAVE_SEARCH_PAGES_PER_QUERY')
+  const configuredMax = Number.parseInt(process.env.BRAVE_SEARCH_MAX_REQUESTS_PER_RUN || '48', 10)
+  const maxRequests = Number.isFinite(configuredMax)
+    ? Math.min(48, Math.max(1, configuredMax))
+    : 48
   let requestsMade = 0
 
   for (const query of queries) {
-    for (let page = 0; page < pagesPerQuery; page++) {
+    if (requestsMade >= maxRequests) break
+
+    for (let page = 0; page < pagesPerQuery && requestsMade < maxRequests; page++) {
       try {
         const { data } = await axios.get(BRAVE_ENDPOINT, {
-          params: { q: query, count: 20, offset: page },
+          // ALL évite de limiter les résultats au marché américain par défaut.
+          // Brave détecte la langue de chaque requête si search_lang est omis.
+          params: { q: query, count: 20, offset: page, country: 'ALL' },
           headers: { 'X-Subscription-Token': apiKey },
           timeout: 15000,
         })
@@ -100,7 +108,7 @@ async function discoverWithBrave(apiKey, queries) {
 
   logger.info(
     `[web-discovery] ${candidates.length} URLs candidates via Brave — ` +
-    `${queries.length} requêtes, ${requestsMade} appels API, ${pagesPerQuery} page(s) max/requête`
+    `${queries.length} requêtes, ${requestsMade}/${maxRequests} appels API maximum, ${pagesPerQuery} page(s) max/requête`
   )
   return candidates
 }
