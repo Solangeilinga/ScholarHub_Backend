@@ -40,6 +40,7 @@ const registerValidation = [
   body('name').isString().trim().isLength({ min: 2, max: 100 }).withMessage('Le nom doit contenir entre 2 et 100 caractères'),
   body('email').isEmail().normalizeEmail().withMessage('Email invalide'),
   body('password')
+    .isString()
     .isLength({ min: 8, max: 128 }).withMessage('Le mot de passe doit contenir entre 8 et 128 caractères')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Le mot de passe doit contenir majuscule, minuscule et chiffre'),
@@ -64,6 +65,6 @@ router.post('/reset-password', passwordResetLimiter, [
     .withMessage('Le mot de passe doit contenir majuscule, minuscule et chiffre'),
 ], authController.resetPassword);
 router.get('/verify-email/:token', param('token').isUUID(4), authController.verifyEmail);
-router.post('/refresh-token', refreshTokenLimiter, authController.refreshToken);
+router.post('/refresh-token', refreshTokenLimiter, body('token').isString().isLength({ min: 1, max: 4096 }), authController.refreshToken);
 
 module.exports = router;
