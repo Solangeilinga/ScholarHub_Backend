@@ -110,7 +110,7 @@ const notifyNewScholarships = async () => {
             ${relevant.map(s => `
               <div style="border: 1px solid #E8EAF6; padding: 15px; margin: 10px 0; border-radius: 8px;">
                 <h3 style="margin: 0 0 8px;">${s.title}</h3>
-                <p style="margin: 0; color: #6B7280;">${s.provider} | Deadline: ${new Date(s.deadline).toLocaleDateString('fr-FR')}</p>
+                <p style="margin: 0; color: #6B7280;">${s.provider} | Deadline: ${s.deadline ? new Date(s.deadline).toLocaleDateString('fr-FR') : 'Non communiquée'}</p>
               </div>
             `).join('')}
           </div>
