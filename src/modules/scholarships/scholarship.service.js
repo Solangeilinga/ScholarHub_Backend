@@ -24,7 +24,8 @@ const getAll = async ({ page = 1, limit = 10, search, country, field, level, typ
     deadline.setDate(deadline.getDate() + parseInt(deadlineDays));
     where.deadline = { lte: deadline, gte: new Date() };
   } else {
-    where.deadline = { gte: new Date() };
+    // Les bourses sans date connue restent visibles ; seules les dates dépassées sont exclues.
+    where.OR = [{ deadline: null }, { deadline: { gte: new Date() } }];
   }
 
   const [scholarships, total] = await Promise.all([
@@ -75,7 +76,7 @@ const getAllAdmin = async ({ page = 1, limit = 100, search }) => {
 
 const getFeatured = async () => {
   return prisma.scholarship.findMany({
-    where: { isActive: true, isFeatured: true, deadline: { gte: new Date() } },
+    where: { isActive: true, isFeatured: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
     take: 6,
     orderBy: { deadline: 'asc' },
   });
@@ -98,7 +99,7 @@ const getRecommended = async (userId) => {
   });
 
   const scholarships = await prisma.scholarship.findMany({
-    where: { isActive: true, deadline: { gte: new Date() } },
+    where: { isActive: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -108,8 +109,10 @@ const getRecommended = async (userId) => {
     if (user.level && s.level.includes(user.level)) score += 30;
     if (user.fields?.length && s.fields.some((f) => user.fields.includes(f))) score += 20;
     if (user.languages?.length && s.languages.some((l) => user.languages.includes(l))) score += 10;
-    const daysLeft = Math.ceil((new Date(s.deadline) - new Date()) / (1000 * 60 * 60 * 24));
-    if (daysLeft > 30) score += 5;
+    const daysLeft = s.deadline
+      ? Math.ceil((new Date(s.deadline) - new Date()) / (1000 * 60 * 60 * 24))
+      : null;
+    if (daysLeft !== null && daysLeft > 30) score += 5;
     return { ...s, score };
   });
 
@@ -120,7 +123,7 @@ const getRecommended = async (userId) => {
     const ids = withScore.map((s) => s.id);
     const fallback = scored
       .filter((s) => !ids.includes(s.id))
-      .sort((a, b) => b.score - a.score || new Date(b.deadline) - new Date(a.deadline));
+      .sort((a, b) => b.score - a.score || (b.deadline ? new Date(b.deadline).getTime() : 0) - (a.deadline ? new Date(a.deadline).getTime() : 0));
     return [...withScore, ...fallback].slice(0, 10);
   }
 
@@ -172,7 +175,7 @@ const incrementView = async (id) => {
 const getStats = async () => {
   const [total, active, byType, byLevel] = await Promise.all([
     prisma.scholarship.count(),
-    prisma.scholarship.count({ where: { isActive: true, deadline: { gte: new Date() } } }),
+    prisma.scholarship.count({ where: { isActive: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] } }),
     prisma.scholarship.groupBy({ by: ['type'], _count: true }),
     prisma.scholarship.findMany({ select: { level: true } }),
   ]);
