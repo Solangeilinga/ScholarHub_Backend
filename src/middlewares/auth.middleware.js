@@ -13,13 +13,19 @@ const authenticate = async (req, res, next) => {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, email: true, name: true, role: true, isVerified: true },
+      select: { id: true, email: true, name: true, role: true, isVerified: true, tokenVersion: true },
     });
 
     if (!user) {
       return res.status(401).json({ error: 'Utilisateur non trouvé' });
     }
 
+    // Compatibilité avec les anciens JWT émis avant l'ajout de tokenVersion.
+    if ((decoded.ver ?? 0) !== user.tokenVersion) {
+      return res.status(401).json({ error: 'Session révoquée, veuillez vous reconnecter' });
+    }
+
+    delete user.tokenVersion;
     req.user = user;
     next();
   } catch (error) {
