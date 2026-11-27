@@ -153,7 +153,7 @@ function isLikelySameScholarship(candidate, existing) {
 
   const titleTokenScore = tokenSimilarity(candidateTitle, existingTitle, true)
   const titleBigramScore = bigramSimilarity(candidateTitle, existingTitle)
-  return (titleTokenScore >= 0.88 && titleBigramScore >= 0.82)
+  return (titleTokenScore >= 0.88 && titleBigramScore >= 0.60)
     || titleBigramScore >= 0.94
 }
 
