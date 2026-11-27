@@ -90,6 +90,10 @@ const resetPassword = async (req, res, next) => {
 
 const verifyEmail = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
     await authService.verifyEmail(req.params.token);
     res.json({ message: 'Email vérifié avec succès' });
   } catch (error) {
