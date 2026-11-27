@@ -1,5 +1,6 @@
 const prisma = require('../../config/db');
 const bcrypt = require('bcryptjs');
+const { validationResult } = require('express-validator');
 const { AppError } = require('../../middlewares/error.middleware');
 
 const getProfile = async (req, res, next) => {
@@ -31,13 +32,24 @@ const updateProfile = async (req, res, next) => {
 
 const changePassword = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
     const { currentPassword, newPassword } = req.body;
+    if (currentPassword === newPassword) {
+      throw new AppError('Le nouveau mot de passe doit être différent de l’ancien', 400);
+    }
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!isValid) throw new AppError('Mot de passe actuel incorrect', 400);
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    await prisma.user.update({ where: { id: req.user.id }, data: { passwordHash } });
-    res.json({ message: 'Mot de passe modifié' });
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
+    });
+    res.json({ message: 'Mot de passe modifié. Veuillez vous reconnecter sur vos appareils.' });
   } catch (error) { next(error); }
 };
 
