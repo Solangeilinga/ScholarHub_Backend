@@ -1,5 +1,6 @@
 const prisma = require('../../config/db');
 const { sendEmail } = require('../../utils/mailer');
+const logger = require('../../utils/logger');
 
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -62,7 +63,7 @@ const deleteTicket = async (req, res) => {
       message: 'Ticket supprimé avec succès' 
     });
   } catch (error) {
-    console.error('Erreur suppression ticket:', error);
+    logger.error('Erreur suppression ticket', { message: error.message, stack: error.stack });
     res.status(500).json({ error: 'Erreur lors de la suppression du ticket' });
   }
 };
