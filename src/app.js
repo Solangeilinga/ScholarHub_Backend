@@ -26,23 +26,30 @@ app.set('trust proxy', 1);
 // Security middlewares
 app.use(helmet());
 
-// ✅ Configuration CORS pour WEB + MOBILE
-app.use(cors({
-  origin: true, // Permet toutes les origines (web, mobile, etc.)
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
-  credentials: true,
-  optionsSuccessStatus: 200
-}));
+// CORS : autoriser les domaines web déclarés et les applications natives (sans Origin).
+// FRONTEND_URL correspond au panel admin ; CORS_ORIGINS permet d'ajouter d'autres domaines.
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  ...(process.env.CORS_ORIGINS || '').split(','),
+]
+  .map((origin) => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
 
-// ✅ Gérer explicitement les requêtes OPTIONS (preflight)
-app.options('*', cors({
-  origin: true,
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ''))) {
+      return callback(null, true);
+    }
+    return callback(new Error('Origine non autorisée par la politique CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
   credentials: true,
-  optionsSuccessStatus: 200
-}));
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Rate limiting (appliqué seulement aux routes /api)
 const limiter = rateLimit({
