@@ -44,7 +44,7 @@ router.post('/reset-password', passwordResetLimiter, [
   body('token').isString().trim().notEmpty().withMessage('Token requis'),
   body('password')
     .isLength({ min: 8 }).withMessage('Mot de passe minimum 8 caractères')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)/)
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Le mot de passe doit contenir majuscule, minuscule et chiffre'),
 ], authController.resetPassword);
 router.get('/verify-email/:token', authController.verifyEmail);
