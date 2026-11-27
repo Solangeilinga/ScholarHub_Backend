@@ -78,7 +78,7 @@ const getAllTickets = async (req, res) => {
     const where = status ? { status } : {};
     const shouldIncludeStats =
       includeStats !== '0' && includeStats !== 'false';
-    const parsedPage = Math.min(Math.max(parseInt(page, 10) || 1, 1), 100000);
+    const parsedPage = Math.min(Math.max(parseInt(page, 10) || 1, 1), 10000);
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
     const skip = (parsedPage - 1) * parsedLimit;
 
