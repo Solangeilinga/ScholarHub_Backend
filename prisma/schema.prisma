@@ -22,6 +22,7 @@ model User {
   avatarUrl            String?
   role                 Role           @default(USER)
   isVerified           Boolean        @default(false)
+  tokenVersion         Int            @default(0)
   verificationToken    String?
   resetPasswordToken   String?
   resetPasswordTokenExpiresAt DateTime?
@@ -46,7 +47,7 @@ model Scholarship {
   provider     String
   providerLogo String?
   type         ScholarshipType
-  typeDetails  String?           // Précision libre : ex. "Réduction de 50% sur la scolarité, pas d'allocation de vie"
+  typeDetails  String?
   countries    String[]
   fields       String[]
   level        StudyLevel[]
@@ -63,17 +64,15 @@ model Scholarship {
   isFeatured   Boolean           @default(false)
   views        Int               @default(0)
 
-  // ← Champs scraping
   status       ScholarshipStatus @default(APPROVED)
   source       String?
   scrapedAt    DateTime?
   verifiedBy   String?
   verifiedAt   DateTime?
 
-  // ← Champs extraction IA (fiabilité)
-  confidenceScore Float?   // 0 à 1, calculé par l'extracteur IA
-  rawExcerpt      String?  // extrait brut de la page source, pour vérification admin
-  extractionNotes String?  // ce que l'IA signale comme incertain/manquant
+  confidenceScore Float?
+  rawExcerpt      String?
+  extractionNotes String?
 
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
@@ -85,7 +84,7 @@ model Scholarship {
   @@index([isFeatured])
   @@index([createdAt])
   @@index([deadline])
-  @@index([status])     // ← nouveau
+  @@index([status])
   @@index([confidenceScore])
   @@map("scholarships")
 }
@@ -144,10 +143,10 @@ model Notification {
 model SupportTicket {
   id        String       @id @default(cuid())
   userId    String
-  subject   String
-  message   String
-  reply     String?
-  status    TicketStatus @default(OPEN)
+  subject  String
+  message  String
+  reply    String?
+  status   TicketStatus @default(OPEN)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
@@ -161,7 +160,7 @@ model SupportTicket {
 model ChatMessage {
   id        String   @id @default(cuid())
   userId    String
-  role      String   // 'user' | 'assistant'
+  role      String
   content   String
   createdAt DateTime @default(now())
 
@@ -170,8 +169,6 @@ model ChatMessage {
   @@index([userId, createdAt])
   @@map("chat_messages")
 }
-
-// ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum Role {
   USER
@@ -202,9 +199,9 @@ enum ScholarshipType {
 }
 
 enum ScholarshipStatus {
-  PENDING    // scrapée, en attente de validation admin
-  APPROVED   // validée et visible dans l'app
-  REJECTED   // rejetée
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum ApplicationStatus {
@@ -221,7 +218,7 @@ enum NotificationType {
   APPLICATION_UPDATE
   SUPPORT_REPLY
   SYSTEM
-  EVENING_REMINDER   // ← nouveau pour le cron 20h
+  EVENING_REMINDER
 }
 
 enum TicketStatus {
