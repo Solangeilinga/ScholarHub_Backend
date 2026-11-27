@@ -86,12 +86,12 @@ async function filterAlreadyKnown(candidates, existingScholarships) {
 function normalizeComparableText(value) {
   return String(value || '')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/&/g, ' and ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
-    .replace(/\\s+/g, ' ')
+    .replace(/\s+/g, ' ')
 }
 
 const GENERIC_TITLE_WORDS = new Set([
