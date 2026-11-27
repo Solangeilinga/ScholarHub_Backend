@@ -1,7 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
-const { chat, getHistory } = require('./chat.controller');
+const { chat, getHistory, deleteHistory } = require('./chat.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 
 const chatLimiter = rateLimit({
@@ -15,5 +15,6 @@ const chatLimiter = rateLimit({
 
 router.post('/', authenticate, chatLimiter, chat);
 router.get('/history', authenticate, getHistory);
+router.delete('/history', authenticate, deleteHistory);
 
 module.exports = router;
