@@ -10,7 +10,35 @@ const publicScholarshipSelect = {
   createdAt: true, updatedAt: true,
 };
 
-const getAll = async ({ page = 1, limit = 10, search, country, field, level, type, language, deadlineDays }) => {
+const parseBoundedInteger = (value, fallback, max, label) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new AppError(`Le paramètre ${label} est invalide.`, 400);
+  }
+  return Math.min(parsed, max);
+};
+
+const readFilter = (value, label, maxLength = 100) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || value.trim().length > maxLength) {
+    throw new AppError(`Le filtre ${label} est invalide.`, 400);
+  }
+  return value.trim() || undefined;
+};
+
+const getAll = async (query = {}) => {
+  const page = parseBoundedInteger(query.page, 1, 100000, 'page');
+  const limit = parseBoundedInteger(query.limit, 10, 50, 'limit');
+  const search = readFilter(query.search, 'recherche', 120);
+  const country = readFilter(query.country, 'pays', 100);
+  const field = readFilter(query.field, 'domaine', 100);
+  const level = readFilter(query.level, 'niveau', 40);
+  const type = readFilter(query.type, 'type', 30);
+  const language = readFilter(query.language, 'langue', 50);
+  const deadlineDays = query.deadlineDays === undefined || query.deadlineDays === ''
+    ? undefined
+    : parseBoundedInteger(query.deadlineDays, undefined, 365, 'délai');
   const skip = (page - 1) * limit;
   const where = { status: 'APPROVED', isActive: true };
   const conditions = [];
@@ -26,17 +54,21 @@ const getAll = async ({ page = 1, limit = 10, search, country, field, level, typ
   }
 
   if (country) where.countries = { has: country };
-  if (field) where.fields = { hasSome: [field] };
+  if (field) where.fields = { has: field };
   if (level) where.level = { has: level };
-  if (type) where.type = type;
+  if (type) {
+    if (!['COMPLETE', 'PARTIELLE', 'RECHERCHE', 'FORMATION'].includes(type)) {
+      throw new AppError('Le filtre type est invalide.', 400);
+    }
+    where.type = type;
+  }
   if (language) where.languages = { has: language };
 
-  if (deadlineDays) {
+  if (deadlineDays !== undefined) {
     const deadline = new Date();
-    deadline.setDate(deadline.getDate() + parseInt(deadlineDays));
+    deadline.setDate(deadline.getDate() + deadlineDays);
     where.deadline = { lte: deadline, gte: new Date() };
   } else {
-    // Les bourses sans date connue restent visibles ; seules les dates dépassées sont exclues.
     conditions.push({ OR: [{ deadline: null }, { deadline: { gte: new Date() } }] });
   }
   if (conditions.length) where.AND = conditions;
@@ -46,7 +78,7 @@ const getAll = async ({ page = 1, limit = 10, search, country, field, level, typ
       where,
       select: publicScholarshipSelect,
       skip,
-      take: parseInt(limit),
+      take: limit,
       orderBy: [{ isFeatured: 'desc' }, { deadline: 'asc' }],
     }),
     prisma.scholarship.count({ where }),
@@ -55,17 +87,20 @@ const getAll = async ({ page = 1, limit = 10, search, country, field, level, typ
   return {
     scholarships,
     pagination: {
-      page: parseInt(page),
-      limit: parseInt(limit),
+      page,
+      limit,
       total,
       totalPages: Math.ceil(total / limit),
     },
   };
 };
 
-const getAllAdmin = async ({ page = 1, limit = 100, search }) => {
+const getAllAdmin = async (query = {}) => {
+  const page = parseBoundedInteger(query.page, 1, 100000, 'page');
+  const limit = parseBoundedInteger(query.limit, 100, 100, 'limit');
+  const search = readFilter(query.search, 'recherche', 120);
   const skip = (page - 1) * limit;
-  const where = {}; // ← pas de filtre isActive ni deadline
+  const where = {};
 
   if (search) {
     where.OR = [
@@ -78,15 +113,17 @@ const getAllAdmin = async ({ page = 1, limit = 100, search }) => {
     prisma.scholarship.findMany({
       where,
       skip,
-      take: parseInt(limit),
-      orderBy: { createdAt: 'desc' }, // ← les plus récentes en premier
+      take: limit,
+      orderBy: { createdAt: 'desc' },
     }),
     prisma.scholarship.count({ where }),
   ]);
 
-  return { scholarships, pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / limit) } };
+  return {
+    scholarships,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  };
 };
-
 
 const getFeatured = async () => {
   return prisma.scholarship.findMany({
@@ -118,6 +155,7 @@ const getRecommended = async (userId) => {
     where: { status: 'APPROVED', isActive: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
     select: publicScholarshipSelect,
     orderBy: { createdAt: 'desc' },
+    take: 500,
   });
 
   const scored = scholarships.map((s) => {
