@@ -80,12 +80,12 @@ router.post('/users', async (req, res, next) => {
     const role = req.body.role === undefined ? 'USER' : req.body.role;
 
     if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100 ||
-        !email || email.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) ||
+        !email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
         typeof password !== 'string') {
       throw new AppError('Nom, email valide et mot de passe sont requis', 400);
     }
     if (password.length < 8 || password.length > 128 ||
-        !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\\d/.test(password)) {
+        !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
       throw new AppError('Le mot de passe doit contenir 8 à 128 caractères, une majuscule, une minuscule et un chiffre', 400);
     }
     const safeName = name.trim();
