@@ -6,7 +6,8 @@ const errorHandler = (err, req, res, next) => {
   }
 
   // Les détails complets restent dans les journaux du serveur, jamais dans la réponse publique.
-  logger.error(err.message || 'Erreur inconnue', { stack: err.stack, path: req.originalUrl, method: req.method });
+  const safePath = req.baseUrl + (req.route?.path || req.path || '/');
+  logger.error(err.message || 'Erreur inconnue', { stack: err.stack, path: safePath, method: req.method });
 
   if (err.code === 'P2002') {
     return res.status(409).json({ error: 'Cette ressource existe déjà' });
