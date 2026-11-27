@@ -123,41 +123,64 @@ const chat = async (req, res) => {
     if (!Array.isArray(messages) || messages.length === 0 || messages.length > 30) {
       return res.status(400).json({ error: 'La conversation doit contenir entre 1 et 30 messages' })
     }
-    const validMessages = messages.every((message) =>
-      message && ['user', 'assistant'].includes(message.role) &&
-      typeof message.content === 'string' && message.content.trim().length > 0 &&
-      message.content.length <= 8000
-    )
-    if (!validMessages || messages[messages.length - 1].role !== 'user') {
-      return res.status(400).json({ error: 'Format de conversation invalide' })
+    // Seul le dernier message utilisateur fourni par le client est accepté.
+    // Les anciens messages assistant sont reconstruits depuis la base afin
+    // qu'un client ne puisse pas fabriquer un faux historique ou de faux rôles.
+    const lastUserMessage = messages[messages.length - 1]
+    if (!lastUserMessage || lastUserMessage.role !== 'user' ||
+        typeof lastUserMessage.content !== 'string' ||
+        !lastUserMessage.content.trim() || lastUserMessage.content.length > 8000) {
+      return res.status(400).json({ error: 'Le dernier message doit être un message utilisateur valide' })
     }
     if (!hasProvider) {
       return res.status(503).json({ error: "Le chatbot n'est pas configuré (clé IA manquante)" })
     }
 
     const userId = req.user.id
-    const lastUserMessage = messages[messages.length - 1]
-    const userProfile = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { country: true, nationality: true, level: true, fields: true, languages: true },
-    })
+    const [userProfile, storedHistory] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { country: true, nationality: true, level: true, fields: true, languages: true },
+      }),
+      prisma.chatMessage.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { role: true, content: true },
+      }),
+    ])
+
+    const safeHistory = storedHistory
+      .reverse()
+      .filter((message) => ['user', 'assistant'].includes(message.role))
+      .map((message) => ({ role: message.role, content: message.content.slice(0, 4000) }))
+    safeHistory.push({ role: 'user', content: lastUserMessage.content.trim() })
 
     const reply = await chatWithTools({
       messages: [
         { role: 'system', content: buildSystemPrompt(userProfile) },
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ...safeHistory,
       ],
       tools: TOOLS,
       executeTool: (name, args) => executeTool(userId, name, args),
     })
 
-    // Persistance de l'historique (best-effort, ne bloque pas la réponse si ça échoue)
-    prisma.chatMessage.createMany({
+    // Historique limité aux 100 derniers messages par compte.
+    await prisma.chatMessage.createMany({
       data: [
-        { userId, role: 'user', content: lastUserMessage.content },
-        { userId, role: 'assistant', content: reply },
+        { userId, role: 'user', content: lastUserMessage.content.trim() },
+        { userId, role: 'assistant', content: String(reply).slice(0, 12000) },
       ],
-    }).catch((e) => logger.warn(`[chat] Échec sauvegarde historique: ${e.message}`))
+    })
+    const retainedMessages = await prisma.chatMessage.findMany({
+      where: { userId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 100,
+      select: { id: true },
+    })
+    await prisma.chatMessage.deleteMany({
+      where: { userId, id: { notIn: retainedMessages.map((message) => message.id) } },
+    })
 
     res.json({ message: reply })
   } catch (error) {
@@ -173,7 +196,7 @@ const getHistory = async (req, res, next) => {
     const history = await prisma.chatMessage.findMany({
       where: { userId: req.user.id },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take: 100,
     })
     res.json({ messages: history.reverse() })
   } catch (error) { next(error) }
