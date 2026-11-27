@@ -1,46 +1,28 @@
 const axios = require('axios')
 const logger = require('../../../utils/logger')
 
-/**
- * Découverte de nouvelles pages de bourses via l'API officielle
- * Google Custom Search (Programmable Search Engine).
- *
- * ⚠️ On n'utilise volontairement PAS le scraping direct des pages de résultats
- * Google (google.com/search) : c'est contraire à ses CGU et bloqué par des
- * mesures anti-bot. L'API officielle est gratuite jusqu'à 100 requêtes/jour.
- *
- * Configuration requise (voir .env.example) :
- * - GOOGLE_CSE_API_KEY : clé API (console.cloud.google.com → Custom Search API)
- * - GOOGLE_CSE_CX      : ID du moteur de recherche programmable
- *   (programmablesearchengine.google.com, configuré pour chercher "tout le web")
- */
+// Découverte Web via Brave Search API (prioritaire), avec Google Custom Search
+// conservé temporairement comme solution de transition jusqu'au 01/01/2027.
 
-const ENDPOINT = 'https://www.googleapis.com/customsearch/v1'
+const BRAVE_ENDPOINT = 'https://api.search.brave.com/res/v1/web/search'
+const GOOGLE_ENDPOINT = 'https://www.googleapis.com/customsearch/v1'
 
-// Domaines à ne jamais retenir comme "source de bourse" : réseaux sociaux,
-// agrégateurs vidéo, etc. — trop peu fiables ou hors périmètre légal/technique.
 const EXCLUDED_DOMAINS = [
   'facebook.com', 'linkedin.com', 'twitter.com', 'x.com', 'instagram.com',
   'tiktok.com', 'youtube.com', 'pinterest.com', 'reddit.com',
 ]
 
-// Requêtes ciblées — à enrichir/ajuster selon les retours de qualité observés
 function getSearchQueries() {
   const year = new Date().getFullYear()
   const nextYear = year + 1
 
-  // Couverture multilingue et régionale : Afrique francophone, anglophone,
-  // lusophone, Afrique du Nord, de l'Est, de l'Ouest, centrale et australe.
   return [
-    // Requêtes générales historiques.
     `bourse d'études Afrique ${year} deadline candidature`,
     `scholarship for African students ${year} deadline apply`,
     `bourse master doctorat Afrique ${year}`,
     `fully funded scholarship Africa application deadline ${year}`,
     `bourse gouvernementale étudiants africains ${year}`,
     `scholarship for African students ${nextYear} applications`,
-
-    // Répertoires et programmes institutionnels internationaux.
     `site:campusfrance.org CampusBourses bourses étudiants internationaux ${year}`,
     `site:diplomatie.gouv.fr bourses étudiants étrangers appels candidature ${year}`,
     `site:erasmus-plus.ec.europa.eu Erasmus Mundus scholarships applications ${year} ${nextYear}`,
@@ -49,95 +31,130 @@ function getSearchQueries() {
     `site:mastercardfdn.org "Scholars Program" university application ${year} ${nextYear}`,
     `site:au.int scholarships African Union students applications ${year} ${nextYear}`,
     `site:auf.org bourses étudiants Afrique appels candidature ${year} ${nextYear}`,
-
-    // Afrique de l'Ouest et centrale francophone.
     `bourses étudiants Burkina Faso Côte d'Ivoire Sénégal Mali Bénin Togo ${year} ${nextYear}`,
     `appel à candidatures bourse université Afrique francophone master doctorat ${year}`,
     `bourse gouvernementale Cameroun Gabon Niger Guinée Tchad étudiants ${year} ${nextYear}`,
-
-    // Afrique anglophone, orientale et australe.
     `scholarships Nigeria Ghana Kenya Uganda Rwanda Tanzania African students ${year} ${nextYear}`,
     `scholarships South Africa Zambia Zimbabwe Botswana Malawi African students ${year} ${nextYear}`,
     `East Africa university government scholarships international students ${year} ${nextYear}`,
-
-    // Afrique du Nord et espace lusophone.
     `bourses Maroc Algérie Tunisie Égypte étudiants africains ${year} ${nextYear}`,
     `bolsas de estudo Moçambique Angola estudantes africanos ${year} ${nextYear}`,
-
-    // Universités et autorités publiques.
     `African university official website scholarship international African students ${year} ${nextYear}`,
     `African ministry higher education government scholarship call for applications ${year} ${nextYear}`,
   ]
 }
 
-// Google limite chaque page à 10 résultats et l'indexation à 100 résultats
-// maximum par requête. Deux pages donnent jusqu'à 20 résultats par requête.
-function getPagesPerQuery() {
-  const configured = Number.parseInt(process.env.GOOGLE_CSE_PAGES_PER_QUERY || '2', 10)
-  if (!Number.isFinite(configured)) return 2
+function getPagesPerQuery(envName, defaultValue = 2) {
+  const configured = Number.parseInt(process.env[envName] || String(defaultValue), 10)
+  if (!Number.isFinite(configured)) return defaultValue
   return Math.min(10, Math.max(1, configured))
 }
 
 function isExcluded(url) {
   try {
-    const host = new URL(url).hostname.replace(/^www\./, '')
+    const host = new URL(url).hostname.replace(/^www\\./, '')
     return EXCLUDED_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`))
   } catch {
     return true
   }
 }
 
-async function discoverCandidates() {
-  const apiKey = process.env.GOOGLE_CSE_API_KEY
-  const cx = process.env.GOOGLE_CSE_CX
-
-  if (!apiKey || !cx) {
-    logger.warn('[google-discovery] GOOGLE_CSE_API_KEY / GOOGLE_CSE_CX absents — découverte Google désactivée')
-    return []
+function toCandidate(item, source) {
+  const link = item.url || item.link
+  if (!link || isExcluded(link)) return null
+  return {
+    title: item.title || item.name || link,
+    link,
+    source,
   }
+}
 
+async function discoverWithBrave(apiKey, queries) {
   const candidates = []
-
-  const pagesPerQuery = getPagesPerQuery()
-  const queries = getSearchQueries()
+  const pagesPerQuery = getPagesPerQuery('BRAVE_SEARCH_PAGES_PER_QUERY')
   let requestsMade = 0
 
   for (const query of queries) {
     for (let page = 0; page < pagesPerQuery; page++) {
-      const start = page * 10 + 1
       try {
-        const { data } = await axios.get(ENDPOINT, {
-          params: { key: apiKey, cx, q: query, num: 10, start },
+        const { data } = await axios.get(BRAVE_ENDPOINT, {
+          params: { q: query, count: 20, offset: page },
+          headers: { 'X-Subscription-Token': apiKey },
           timeout: 15000,
         })
         requestsMade++
 
-        for (const item of data.items || []) {
-          if (!item.link || isExcluded(item.link)) continue
-          candidates.push({
-            title: item.title,
-            link: item.link,
-            source: 'google-discovery',
-          })
+        for (const item of data.web?.results || []) {
+          const candidate = toCandidate(item, 'brave-discovery')
+          if (candidate) candidates.push(candidate)
         }
 
-        // Arrête la pagination si Google n'a plus de page suivante.
-        if (!data.queries?.nextPage?.length || !data.items?.length) break
-
-        // Respecter le quota / éviter le rate-limit.
-        await new Promise((r) => setTimeout(r, 500))
-      } catch (e) {
-        logger.warn(`[google-discovery] Erreur requête page ${page + 1} "${query}": ${e.response?.status || ''} ${e.message}`)
+        if (!data.query?.more_results_available || !(data.web?.results || []).length) break
+        await new Promise((resolve) => setTimeout(resolve, 350))
+      } catch (error) {
+        logger.warn(`[web-discovery] Erreur Brave page ${page + 1} "${query}": ${error.response?.status || ''} ${error.message}`)
         break
       }
     }
   }
 
   logger.info(
-    `[google-discovery] ${candidates.length} URLs candidates découvertes via Google — ` +
+    `[web-discovery] ${candidates.length} URLs candidates via Brave — ` +
     `${queries.length} requêtes, ${requestsMade} appels API, ${pagesPerQuery} page(s) max/requête`
   )
   return candidates
+}
+
+async function discoverWithGoogle(apiKey, cx, queries) {
+  const candidates = []
+  const pagesPerQuery = getPagesPerQuery('GOOGLE_CSE_PAGES_PER_QUERY')
+  let requestsMade = 0
+
+  for (const query of queries) {
+    for (let page = 0; page < pagesPerQuery; page++) {
+      try {
+        const { data } = await axios.get(GOOGLE_ENDPOINT, {
+          params: { key: apiKey, cx, q: query, num: 10, start: page * 10 + 1 },
+          timeout: 15000,
+        })
+        requestsMade++
+
+        for (const item of data.items || []) {
+          const candidate = toCandidate(item, 'google-discovery')
+          if (candidate) candidates.push(candidate)
+        }
+
+        if (!data.queries?.nextPage?.length || !data.items?.length) break
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      } catch (error) {
+        logger.warn(`[web-discovery] Erreur Google page ${page + 1} "${query}": ${error.response?.status || ''} ${error.message}`)
+        break
+      }
+    }
+  }
+
+  logger.info(
+    `[web-discovery] ${candidates.length} URLs candidates via Google (mode transition) — ` +
+    `${queries.length} requêtes, ${requestsMade} appels API, ${pagesPerQuery} page(s) max/requête`
+  )
+  return candidates
+}
+
+async function discoverCandidates() {
+  const queries = getSearchQueries()
+  const braveKey = process.env.BRAVE_SEARCH_API_KEY
+
+  // Brave est prioritaire dès qu'une clé est configurée.
+  if (braveKey) return discoverWithBrave(braveKey, queries)
+
+  // Compatibilité temporaire : permet de continuer à fonctionner avant
+  // l'ajout de la clé Brave, sans interrompre le scraping existant.
+  const googleKey = process.env.GOOGLE_CSE_API_KEY
+  const googleCx = process.env.GOOGLE_CSE_CX
+  if (googleKey && googleCx) return discoverWithGoogle(googleKey, googleCx, queries)
+
+  logger.warn('[web-discovery] Aucune clé Brave ou Google configurée — découverte Web désactivée')
+  return []
 }
 
 module.exports = { discoverCandidates }
