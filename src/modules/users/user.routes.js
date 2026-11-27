@@ -13,7 +13,7 @@ router.put('/change-password', [
   body('newPassword')
     .isString()
     .isLength({ min: 8 }).withMessage('Mot de passe minimum 8 caractères')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)/)
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Le nouveau mot de passe doit contenir une majuscule, une minuscule et un chiffre'),
 ], userController.changePassword);
 router.delete('/account', userController.deleteAccount);
