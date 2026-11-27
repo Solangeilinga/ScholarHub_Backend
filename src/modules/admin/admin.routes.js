@@ -2,7 +2,6 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
 const prisma = require('../../config/db');
 const { authenticate, requireAdmin } = require('../../middlewares/auth.middleware');
 const { AppError } = require('../../middlewares/error.middleware');
@@ -121,7 +120,7 @@ router.post('/users', accountCreationLimiter, async (req, res, next) => {
         passwordHash,
         role,
         isVerified: true, // créé par un admin -> pas de vérification email nécessaire
-        verificationToken: uuidv4(),
+        verificationToken: null,
       },
       select: { id: true, name: true, email: true, role: true, isVerified: true, createdAt: true },
     });
