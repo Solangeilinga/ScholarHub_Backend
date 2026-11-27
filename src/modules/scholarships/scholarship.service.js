@@ -82,7 +82,11 @@ const getFeatured = async () => {
 };
 
 const getOne = async (id) => {
-  const scholarship = await prisma.scholarship.findUnique({ where: { id } });
+  // Une bourse non publiée ou désactivée ne doit jamais être accessible au public,
+  // même si son identifiant est connu.
+  const scholarship = await prisma.scholarship.findFirst({
+    where: { id, status: 'APPROVED', isActive: true },
+  });
   if (!scholarship) throw new AppError('Bourse non trouvée', 404);
   return scholarship;
 };
@@ -157,6 +161,8 @@ const updateApplication = async (userId, scholarshipId, data) => {
 };
 
 const incrementView = async (id) => {
+  // Vérifie d'abord que la bourse est bien publiée et active.
+  await getOne(id);
   return prisma.scholarship.update({
     where: { id },
     data: { views: { increment: 1 } },
