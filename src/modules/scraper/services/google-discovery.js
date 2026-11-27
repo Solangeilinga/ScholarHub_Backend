@@ -25,13 +25,18 @@ const EXCLUDED_DOMAINS = [
 ]
 
 // Requêtes ciblées — à enrichir/ajuster selon les retours de qualité observés
-const SEARCH_QUERIES = [
-  'bourse d\'études Afrique 2026 deadline candidature',
-  'scholarship for African students 2026 deadline apply',
-  'bourse master doctorat Afrique 2026',
-  'fully funded scholarship Africa application deadline',
-  'bourse gouvernementale étudiants africains 2026',
-]
+function getSearchQueries() {
+  const year = new Date().getFullYear()
+  const nextYear = year + 1
+  return [
+    `bourse d'études Afrique ${year} deadline candidature`,
+    `scholarship for African students ${year} deadline apply`,
+    `bourse master doctorat Afrique ${year}`,
+    `fully funded scholarship Africa application deadline ${year}`,
+    `bourse gouvernementale étudiants africains ${year}`,
+    `scholarship for African students ${nextYear} applications`,
+  ]
+}
 
 function isExcluded(url) {
   try {
@@ -53,7 +58,7 @@ async function discoverCandidates() {
 
   const candidates = []
 
-  for (const query of SEARCH_QUERIES) {
+  for (const query of getSearchQueries()) {
     try {
       const { data } = await axios.get(ENDPOINT, {
         params: { key: apiKey, cx, q: query, num: 10 },
