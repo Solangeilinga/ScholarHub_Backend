@@ -158,17 +158,9 @@ const runScraping = async () => {
         return
       }
 
-      let deadline = extracted.deadline
-      let extractionNotes = extracted.extractionNotes
-      let confidenceScore = extracted.confidenceScore
-      if (!deadline) {
-        // On ne peut pas laisser le champ vide (contrainte de schéma) mais on
-        // le signale clairement au lieu de le faire passer pour une vraie date.
-        deadline = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
-        confidenceScore = Math.min(confidenceScore, 0.35)
-        extractionNotes = [extractionNotes, 'Deadline non trouvée sur la page — valeur provisoire (+90j), à vérifier manuellement.']
-          .filter(Boolean).join(' | ')
-      }
+      // Une deadline absente reste null : aucune date artificielle n'est créée.
+      const deadline = extracted.deadline
+      const extractionNotes = extracted.extractionNotes
 
       await prisma.scholarship.create({
         data: {
