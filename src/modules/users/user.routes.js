@@ -7,6 +7,7 @@ const { authenticate } = require('../../middlewares/auth.middleware');
 router.use(authenticate);
 
 router.get('/profile', userController.getProfile);
+router.get('/data-export', userController.exportPersonalData);
 router.put('/profile', [
   body('name').optional().isString().trim().isLength({ min: 2, max: 100 }).withMessage('Le nom doit contenir entre 2 et 100 caractères'),
   body('country').optional({ nullable: true }).isString().isLength({ max: 100 }).withMessage('Pays invalide'),
@@ -30,7 +31,7 @@ router.put('/change-password', [
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Le nouveau mot de passe doit contenir une majuscule, une minuscule et un chiffre'),
 ], userController.changePassword);
-router.delete('/account', userController.deleteAccount);
+router.delete('/account', body('password').isString().notEmpty().withMessage('Mot de passe requis'), userController.deleteAccount);
 router.get('/saved', userController.getSaved);
 router.get('/applications', userController.getApplications);
 router.patch('/fcm-token', body('fcmToken').custom((value) => value === null || (typeof value === 'string' && value.length <= 4096)).withMessage('Token de notification invalide'), userController.updateFcmToken);
