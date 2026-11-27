@@ -244,6 +244,26 @@ const executeScraping = async () => {
     errors: 0,
   }
 
+  // Nettoyage de la file historique : les annonces issues du scraper qui
+  // étaient en attente sous l'ancien workflow ne doivent plus demander
+  // d'approbation humaine. On les conserve pour audit, mais elles restent
+  // non publiées et passent en REJECTED. Les fiches non issues du scraper
+  // (scrapedAt = null) ne sont pas touchées.
+  const legacyPending = await prisma.scholarship.updateMany({
+    where: {
+      status: 'PENDING',
+      scrapedAt: { not: null },
+      verifiedBy: null,
+    },
+    data: {
+      status: 'REJECTED',
+      isActive: false,
+    },
+  })
+  if (legacyPending.count > 0) {
+    logger.info(`[scraper.service] ${legacyPending.count} anciennes annonces en attente archivées sans publication`)
+  }
+
   const candidates = await collectCandidateLinks()
   results.candidatesFound = candidates.length
 
