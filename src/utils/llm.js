@@ -94,7 +94,7 @@ async function completeWithFallback({ messages, jsonMode = false, maxTokens = 12
  * sauvegardées, candidatures...) avant de donner sa réponse finale.
  * `executeTool(name, args)` doit retourner une chaîne (le résultat, en JSON de préférence).
  */
-async function chatWithTools({ messages, tools, executeTool, maxTokens = 1024, maxRounds = 4 }) {
+async function chatWithTools({ messages, tools, executeTool, maxTokens = 800, maxRounds = 3, maxToolCalls = 3 }) {
   let lastError
   for (const provider of PROVIDERS) {
     try {
@@ -115,7 +115,7 @@ async function chatWithTools({ messages, tools, executeTool, maxTokens = 1024, m
         }
 
         convo.push({ role: 'assistant', content: msg.content || null, tool_calls: toolCalls })
-        for (const call of toolCalls) {
+        for (const call of toolCalls.slice(0, maxToolCalls)) {
           let result
           try {
             const args = call.function.arguments ? JSON.parse(call.function.arguments) : {}
@@ -123,7 +123,8 @@ async function chatWithTools({ messages, tools, executeTool, maxTokens = 1024, m
           } catch (e) {
             result = JSON.stringify({ error: e.message })
           }
-          convo.push({ role: 'tool', tool_call_id: call.id, content: typeof result === 'string' ? result : JSON.stringify(result) })
+          const toolContent = typeof result === 'string' ? result : JSON.stringify(result)
+          convo.push({ role: 'tool', tool_call_id: call.id, content: String(toolContent).slice(0, 8000) })
         }
       }
       // Trop de tours d'outils sans réponse finale — on redemande une synthèse sans outils
