@@ -19,7 +19,7 @@ const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
 const getPagination = (query, defaultLimit = 20) => {
   const parsedPage = Number.parseInt(query.page, 10);
   const parsedLimit = Number.parseInt(query.limit, 10);
-  const page = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? Math.min(parsedPage, 100000) : 1;
+  const page = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? Math.min(parsedPage, 10000) : 1;
   const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0
     ? Math.min(parsedLimit, 100)
     : defaultLimit;
