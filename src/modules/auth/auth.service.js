@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const prisma = require('../../config/db');
@@ -14,6 +15,8 @@ const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => 
 })[char]);
 
 
+const hashOneTimeToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
+
 const generateToken = (userId, tokenVersion = 0) => {
   return jwt.sign({ userId, ver: tokenVersion }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
@@ -28,6 +31,7 @@ const register = async ({ name, email, password, country }) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const verificationToken = uuidv4();
+  const verificationTokenHash = hashOneTimeToken(verificationToken);
 
   const user = await prisma.user.create({
     data: {
@@ -35,7 +39,7 @@ const register = async ({ name, email, password, country }) => {
       email,
       passwordHash,
       country,
-      verificationToken,
+      verificationToken: verificationTokenHash,
     },
     select: { id: true, name: true, email: true, country: true, role: true, tokenVersion: true, createdAt: true },
   });
@@ -98,7 +102,7 @@ const forgotPassword = async (email) => {
   const resetPasswordTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
   await prisma.user.update({
     where: { id: user.id },
-    data: { resetPasswordToken: resetToken, resetPasswordTokenExpiresAt },
+    data: { resetPasswordToken: hashOneTimeToken(resetToken), resetPasswordTokenExpiresAt },
   });
 
   await sendEmail({
@@ -116,7 +120,12 @@ const forgotPassword = async (email) => {
 };
 
 const resetPassword = async (token, password) => {
-  const user = await prisma.user.findFirst({ where: { resetPasswordToken: token } });
+  const tokenHash = hashOneTimeToken(token);
+  // Accepte temporairement les anciens jetons stockés en clair pour ne pas casser
+  // les liens déjà envoyés avant cette mise à jour.
+  const user = await prisma.user.findFirst({
+    where: { OR: [{ resetPasswordToken: tokenHash }, { resetPasswordToken: token }] },
+  });
   if (!user) throw new AppError('Token invalide ou expiré', 400);
 
   if (!user.resetPasswordTokenExpiresAt || user.resetPasswordTokenExpiresAt < new Date()) {
@@ -136,7 +145,10 @@ const resetPassword = async (token, password) => {
 };
 
 const verifyEmail = async (token) => {
-  const user = await prisma.user.findFirst({ where: { verificationToken: token } });
+  const tokenHash = hashOneTimeToken(token);
+  const user = await prisma.user.findFirst({
+    where: { OR: [{ verificationToken: tokenHash }, { verificationToken: token }] },
+  });
   if (!user) throw new AppError('Token de vérification invalide', 400);
 
   await prisma.user.update({
