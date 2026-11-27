@@ -46,7 +46,8 @@ const register = async ({ name, email, password, country }) => {
   });
 
   const token = generateToken(user.id, user.tokenVersion);
-  return { user, token };
+  const { tokenVersion, ...userSafe } = user;
+  return { user: userSafe, token };
 };
 
 const login = async ({ email, password }) => {
@@ -60,7 +61,7 @@ const login = async ({ email, password }) => {
     throw new AppError('Email ou mot de passe incorrect', 401);
   }
 
-  const { passwordHash, verificationToken, resetPasswordToken, resetPasswordTokenExpiresAt, ...userSafe } = user;
+  const { passwordHash, verificationToken, resetPasswordToken, resetPasswordTokenExpiresAt, tokenVersion, ...userSafe } = user;
   const token = generateToken(user.id, user.tokenVersion);
 
   return { user: userSafe, token };
