@@ -24,10 +24,10 @@ router.put('/profile', [
   body('notificationsEnabled').optional().isBoolean().withMessage('Préférence de notification invalide'),
 ], userController.updateProfile);
 router.put('/change-password', [
-  body('currentPassword').isString().notEmpty().withMessage('Mot de passe actuel requis'),
+  body('currentPassword').isString().isLength({ min: 1, max: 128 }).withMessage('Mot de passe actuel invalide'),
   body('newPassword')
     .isString()
-    .isLength({ min: 8 }).withMessage('Mot de passe minimum 8 caractères')
+    .isLength({ min: 8, max: 128 }).withMessage('Le nouveau mot de passe doit contenir entre 8 et 128 caractères')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Le nouveau mot de passe doit contenir une majuscule, une minuscule et un chiffre'),
 ], userController.changePassword);
