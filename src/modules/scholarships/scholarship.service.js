@@ -28,7 +28,7 @@ const readFilter = (value, label, maxLength = 100) => {
 };
 
 const getAll = async (query = {}) => {
-  const page = parseBoundedInteger(query.page, 1, 100000, 'page');
+  const page = parseBoundedInteger(query.page, 1, 10000, 'page');
   const limit = parseBoundedInteger(query.limit, 10, 50, 'limit');
   const search = readFilter(query.search, 'recherche', 120);
   const country = readFilter(query.country, 'pays', 100);
