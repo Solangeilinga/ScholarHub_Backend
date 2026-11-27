@@ -5,8 +5,8 @@ const prisma = require('../../config/db');
 const { AppError } = require('../../middlewares/error.middleware');
 const { sendEmail } = require('../../utils/mailer');
 
-const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, {
+const generateToken = (userId, tokenVersion = 0) => {
+  return jwt.sign({ userId, ver: tokenVersion }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   });
 };
@@ -28,7 +28,7 @@ const register = async ({ name, email, password, country }) => {
       country,
       verificationToken,
     },
-    select: { id: true, name: true, email: true, country: true, role: true, createdAt: true },
+    select: { id: true, name: true, email: true, country: true, role: true, tokenVersion: true, createdAt: true },
   });
 
   // Send verification email
@@ -45,7 +45,7 @@ const register = async ({ name, email, password, country }) => {
     `,
   });
 
-  const token = generateToken(user.id);
+  const token = generateToken(user.id, user.tokenVersion);
   return { user, token };
 };
 
@@ -61,7 +61,7 @@ const login = async ({ email, password }) => {
   }
 
   const { passwordHash, verificationToken, resetPasswordToken, resetPasswordTokenExpiresAt, ...userSafe } = user;
-  const token = generateToken(user.id);
+  const token = generateToken(user.id, user.tokenVersion);
 
   return { user: userSafe, token };
 };
@@ -116,7 +116,12 @@ const resetPassword = async (token, password) => {
   const passwordHash = await bcrypt.hash(password, 12);
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash, resetPasswordToken: null, resetPasswordTokenExpiresAt: null },
+    data: {
+      passwordHash,
+      resetPasswordToken: null,
+      resetPasswordTokenExpiresAt: null,
+      tokenVersion: { increment: 1 },
+    },
   });
 };
 
@@ -133,7 +138,14 @@ const verifyEmail = async (token) => {
 const refreshToken = async (token) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const newToken = generateToken(decoded.userId);
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, tokenVersion: true },
+    });
+    if (!user || (decoded.ver ?? 0) !== user.tokenVersion) {
+      throw new AppError('Session expirée, veuillez vous reconnecter', 401);
+    }
+    const newToken = generateToken(user.id, user.tokenVersion);
     return { token: newToken };
   } catch {
     throw new AppError('Token invalide', 401);
@@ -145,7 +157,10 @@ const logout = async (userId) => {
   // Supprimer le FCM token à la déconnexion
   await prisma.user.update({
     where: { id: userId },
-    data: { fcmToken: null },
+    data: {
+      fcmToken: null,
+      tokenVersion: { increment: 1 },
+    },
   });
 };
 
