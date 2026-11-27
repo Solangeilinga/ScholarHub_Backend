@@ -71,10 +71,13 @@ const deleteTicket = async (req, res) => {
 const getAllTickets = async (req, res) => {
   try {
     const { status, includeStats, page, limit } = req.query;
+    if (status !== undefined && !['OPEN', 'ANSWERED', 'CLOSED'].includes(status)) {
+      return res.status(400).json({ error: 'Filtre de statut invalide' });
+    }
     const where = status ? { status } : {};
     const shouldIncludeStats =
       includeStats !== '0' && includeStats !== 'false';
-    const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+    const parsedPage = Math.min(Math.max(parseInt(page, 10) || 1, 1), 100000);
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
     const skip = (parsedPage - 1) * parsedLimit;
 
