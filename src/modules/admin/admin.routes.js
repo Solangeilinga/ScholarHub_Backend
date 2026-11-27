@@ -19,7 +19,7 @@ const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
 const getPagination = (query, defaultLimit = 20) => {
   const parsedPage = Number.parseInt(query.page, 10);
   const parsedLimit = Number.parseInt(query.limit, 10);
-  const page = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const page = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? Math.min(parsedPage, 100000) : 1;
   const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0
     ? Math.min(parsedLimit, 100)
     : defaultLimit;
@@ -62,6 +62,9 @@ router.get('/scholarships', async (req, res, next) => {
   try {
     const { page, limit, skip } = getPagination(req.query, 100);
     const { search } = req.query;
+    if (search !== undefined && (typeof search !== 'string' || search.trim().length > 120)) {
+      throw new AppError('Le terme de recherche est invalide ou trop long', 400);
+    }
     const where = {};
     if (search) {
       where.OR = [
