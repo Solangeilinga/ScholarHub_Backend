@@ -161,6 +161,16 @@ const runScraping = async () => {
       // Une deadline absente reste null : aucune date artificielle n'est créée.
       const deadline = extracted.deadline
       const extractionNotes = extracted.extractionNotes
+      const confidenceScore = extracted.confidenceScore
+
+      // Publication automatique uniquement si les informations essentielles sont solides.
+      // Une deadline absente n'empêche pas la publication si le reste est fiable.
+      const canAutoPublish = confidenceScore >= 0.85
+        && extracted.providerWasExtracted
+        && extracted.descriptionWasExtracted
+        && extracted.typeIsExplicit
+        && extracted.countries.length > 0
+      const publicationStatus = canAutoPublish ? 'APPROVED' : 'PENDING'
 
       await prisma.scholarship.create({
         data: {
@@ -181,8 +191,8 @@ const runScraping = async () => {
           requirements: extracted.requirements,
           source: candidate.source,
           scrapedAt: new Date(),
-          status: 'PENDING',
-          isActive: false,
+          status: publicationStatus,
+          isActive: canAutoPublish,
           confidenceScore,
           rawExcerpt: extracted.rawExcerpt,
           extractionNotes,
@@ -190,6 +200,8 @@ const runScraping = async () => {
       })
 
       results.inserted++
+      if (canAutoPublish) results.autoPublished = (results.autoPublished || 0) + 1
+      else results.sentToReview = (results.sentToReview || 0) + 1
       if (confidenceScore < 0.5) results.lowConfidenceInserted++
     } catch (e) {
       results.errors++
