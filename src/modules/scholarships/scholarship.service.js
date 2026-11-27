@@ -3,14 +3,17 @@ const { AppError } = require('../../middlewares/error.middleware');
 
 const getAll = async ({ page = 1, limit = 10, search, country, field, level, type, language, deadlineDays }) => {
   const skip = (page - 1) * limit;
-  const where = { isActive: true };
+  const where = { status: 'APPROVED', isActive: true };
+  const conditions = [];
 
   if (search) {
-    where.OR = [
-      { title: { contains: search, mode: 'insensitive' } },
-      { description: { contains: search, mode: 'insensitive' } },
-      { provider: { contains: search, mode: 'insensitive' } },
-    ];
+    conditions.push({
+      OR: [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { provider: { contains: search, mode: 'insensitive' } },
+      ],
+    });
   }
 
   if (country) where.countries = { has: country };
@@ -25,8 +28,9 @@ const getAll = async ({ page = 1, limit = 10, search, country, field, level, typ
     where.deadline = { lte: deadline, gte: new Date() };
   } else {
     // Les bourses sans date connue restent visibles ; seules les dates dépassées sont exclues.
-    where.OR = [{ deadline: null }, { deadline: { gte: new Date() } }];
+    conditions.push({ OR: [{ deadline: null }, { deadline: { gte: new Date() } }] });
   }
+  if (conditions.length) where.AND = conditions;
 
   const [scholarships, total] = await Promise.all([
     prisma.scholarship.findMany({
@@ -76,7 +80,7 @@ const getAllAdmin = async ({ page = 1, limit = 100, search }) => {
 
 const getFeatured = async () => {
   return prisma.scholarship.findMany({
-    where: { isActive: true, isFeatured: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
+    where: { status: 'APPROVED', isActive: true, isFeatured: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
     take: 6,
     orderBy: { deadline: 'asc' },
   });
@@ -99,7 +103,7 @@ const getRecommended = async (userId) => {
   });
 
   const scholarships = await prisma.scholarship.findMany({
-    where: { isActive: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
+    where: { status: 'APPROVED', isActive: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -173,11 +177,15 @@ const incrementView = async (id) => {
 };
 
 const getStats = async () => {
-  const [total, active, byType, byLevel] = await Promise.all([
-    prisma.scholarship.count(),
-    prisma.scholarship.count({ where: { isActive: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] } }),
-    prisma.scholarship.groupBy({ by: ['type'], _count: true }),
-    prisma.scholarship.findMany({ select: { level: true } }),
+  const publicWhere = { status: 'APPROVED', isActive: true };
+  const currentlyAvailableWhere = {
+    ...publicWhere,
+    OR: [{ deadline: null }, { deadline: { gte: new Date() } }],
+  };
+  const [total, active, byType] = await Promise.all([
+    prisma.scholarship.count({ where: publicWhere }),
+    prisma.scholarship.count({ where: currentlyAvailableWhere }),
+    prisma.scholarship.groupBy({ by: ['type'], where: publicWhere, _count: true }),
   ]);
 
   return { total, active, byType };
