@@ -224,16 +224,26 @@ const sendEveningReminder = async () => {
 // ─── 🆕 Scraping automatique ──────────────────────────────────────────────────
 const runDailyScraping = async () => {
   logger.info('🔍 Scraping automatique quotidien...');
-  try {
-    const results = await runScraping();
-    if (results.skipped) {
-      logger.info('⏭️ Scraping quotidien ignoré : une autre exécution est déjà en cours');
+  const maxAttempts = 2;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const results = await runScraping();
+      if (results.skipped) {
+        logger.info('⏭️ Scraping quotidien ignoré : une autre exécution est déjà en cours');
+        return;
+      }
+      logger.info(`✅ Scraping terminé — ${results.inserted} nouvelles bourses insérées (${results.autoPublished} publiées automatiquement, ${results.sentToReview} en attente de validation, ${results.errors} erreur(s))`);
       return;
+    } catch (e) {
+      logger.error(`❌ Échec du scraping quotidien (tentative ${attempt}/${maxAttempts}): ${e.message}`);
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
+      }
     }
-    logger.info(`✅ Scraping terminé — ${results.inserted} nouvelles bourses insérées (${results.autoPublished} publiées automatiquement, ${results.sentToReview} en attente de validation)`);
-  } catch (e) {
-    logger.error(`❌ Erreur scraping: ${e.message}`);
   }
+
+  logger.error('❌ Scraping quotidien abandonné après plusieurs échecs. Une intervention est nécessaire.');
 };
 
 // ─── Démarrage ────────────────────────────────────────────────────────────────
