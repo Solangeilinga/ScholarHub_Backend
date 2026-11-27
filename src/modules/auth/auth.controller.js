@@ -99,6 +99,10 @@ const verifyEmail = async (req, res, next) => {
 
 const refreshToken = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
     const { token } = req.body;
     const result = await authService.refreshToken(token);
     res.json(result);
