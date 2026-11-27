@@ -55,7 +55,14 @@ const getAll = async (query = {}) => {
 
   if (country) where.countries = { has: country };
   if (field) where.fields = { has: field };
-  if (level) where.level = { has: level };
+  if (level) {
+    const validLevels = [
+      'BEPC', 'BACCALAUREAT', 'LICENCE_1', 'LICENCE_2', 'LICENCE_3', 'LICENCE',
+      'MAITRISE', 'MASTER_1', 'MASTER_2', 'MASTER', 'DOCTORAT_1', 'DOCTORAT_2', 'DOCTORAT',
+    ];
+    if (!validLevels.includes(level)) throw new AppError('Le filtre niveau est invalide.', 400);
+    where.level = { has: level };
+  }
   if (type) {
     if (!['COMPLETE', 'PARTIELLE', 'RECHERCHE', 'FORMATION'].includes(type)) {
       throw new AppError('Le filtre type est invalide.', 400);
