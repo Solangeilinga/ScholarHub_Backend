@@ -1,6 +1,15 @@
 const prisma = require('../../config/db');
 const { AppError } = require('../../middlewares/error.middleware');
 
+const publicScholarshipSelect = {
+  id: true, title: true, description: true, provider: true, providerLogo: true,
+  type: true, typeDetails: true, countries: true, fields: true, level: true,
+  amount: true, currency: true, deadline: true, startDate: true, duration: true,
+  link: true, requirements: true, benefits: true, languages: true,
+  isActive: true, isFeatured: true, views: true, status: true,
+  createdAt: true, updatedAt: true,
+};
+
 const getAll = async ({ page = 1, limit = 10, search, country, field, level, type, language, deadlineDays }) => {
   const skip = (page - 1) * limit;
   const where = { status: 'APPROVED', isActive: true };
@@ -35,6 +44,7 @@ const getAll = async ({ page = 1, limit = 10, search, country, field, level, typ
   const [scholarships, total] = await Promise.all([
     prisma.scholarship.findMany({
       where,
+      select: publicScholarshipSelect,
       skip,
       take: parseInt(limit),
       orderBy: [{ isFeatured: 'desc' }, { deadline: 'asc' }],
@@ -81,6 +91,7 @@ const getAllAdmin = async ({ page = 1, limit = 100, search }) => {
 const getFeatured = async () => {
   return prisma.scholarship.findMany({
     where: { status: 'APPROVED', isActive: true, isFeatured: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
+    select: publicScholarshipSelect,
     take: 6,
     orderBy: { deadline: 'asc' },
   });
@@ -91,6 +102,7 @@ const getOne = async (id) => {
   // même si son identifiant est connu.
   const scholarship = await prisma.scholarship.findFirst({
     where: { id, status: 'APPROVED', isActive: true },
+    select: publicScholarshipSelect,
   });
   if (!scholarship) throw new AppError('Bourse non trouvée', 404);
   return scholarship;
@@ -104,6 +116,7 @@ const getRecommended = async (userId) => {
 
   const scholarships = await prisma.scholarship.findMany({
     where: { status: 'APPROVED', isActive: true, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
+    select: publicScholarshipSelect,
     orderBy: { createdAt: 'desc' },
   });
 
@@ -147,23 +160,56 @@ const unsaveScholarship = async (userId, scholarshipId) => {
   await prisma.savedScholarship.deleteMany({ where: { userId, scholarshipId } });
 };
 
-const trackApplication = async (userId, scholarshipId, { status, notes }) => {
+const validateApplicationInput = ({ status, notes }) => {
+  const allowedStatuses = ['SAVED', 'EN_COURS', 'SOUMISE', 'ACCEPTEE', 'REFUSEE'];
+  if (status !== undefined && !allowedStatuses.includes(status)) {
+    throw new AppError('Statut de candidature invalide', 400);
+  }
+  if (notes !== undefined && notes !== null &&
+      (typeof notes !== 'string' || notes.length > 5000)) {
+    throw new AppError('Les notes ne doivent pas dépasser 5 000 caractères', 400);
+  }
+};
+
+const trackApplication = async (userId, scholarshipId, input = {}) => {
+  const { status, notes } = input;
+  validateApplicationInput({ status, notes });
   await getOne(scholarshipId);
+  const safeData = {};
+  if (status !== undefined) safeData.status = status;
+  if (notes !== undefined) safeData.notes = notes;
   return prisma.application.upsert({
     where: { userId_scholarshipId: { userId, scholarshipId } },
-    update: { status, notes },
-    create: { userId, scholarshipId, status: status || 'SAVED', notes },
+    update: safeData,
+    create: { userId, scholarshipId, status: status || 'SAVED', notes: notes ?? null },
+    select: {
+      id: true, scholarshipId: true, status: true, notes: true,
+      appliedAt: true, createdAt: true, updatedAt: true,
+    },
   });
 };
 
-const updateApplication = async (userId, scholarshipId, data) => {
+const updateApplication = async (userId, scholarshipId, input = {}) => {
+  const { status, notes } = input;
+  validateApplicationInput({ status, notes });
+  if (status === undefined && notes === undefined) {
+    throw new AppError('Aucune information de candidature à modifier', 400);
+  }
   const application = await prisma.application.findUnique({
     where: { userId_scholarshipId: { userId, scholarshipId } },
+    select: { id: true },
   });
   if (!application) throw new AppError('Candidature non trouvée', 404);
+  const safeData = {};
+  if (status !== undefined) safeData.status = status;
+  if (notes !== undefined) safeData.notes = notes;
   return prisma.application.update({
     where: { userId_scholarshipId: { userId, scholarshipId } },
-    data,
+    data: safeData,
+    select: {
+      id: true, scholarshipId: true, status: true, notes: true,
+      appliedAt: true, createdAt: true, updatedAt: true,
+    },
   });
 };
 
