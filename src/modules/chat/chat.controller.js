@@ -57,7 +57,7 @@ async function executeTool(userId, name, args) {
     }
     const results = await prisma.scholarship.findMany({
       where,
-      take: Math.min(args.limit || 5, 10),
+      take: Number.isInteger(args.limit) && args.limit > 0 ? Math.min(args.limit, 10) : 5,
       orderBy: { deadline: 'asc' },
       select: { id: true, title: true, provider: true, countries: true, level: true, deadline: true, amount: true, currency: true, link: true },
     })
@@ -118,10 +118,18 @@ Règles :
 
 const chat = async (req, res) => {
   try {
-    const { messages, userProfile } = req.body
+    const { messages } = req.body
 
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({ error: 'Messages requis' })
+    if (!Array.isArray(messages) || messages.length === 0 || messages.length > 30) {
+      return res.status(400).json({ error: 'La conversation doit contenir entre 1 et 30 messages' })
+    }
+    const validMessages = messages.every((message) =>
+      message && ['user', 'assistant'].includes(message.role) &&
+      typeof message.content === 'string' && message.content.trim().length > 0 &&
+      message.content.length <= 8000
+    )
+    if (!validMessages || messages[messages.length - 1].role !== 'user') {
+      return res.status(400).json({ error: 'Format de conversation invalide' })
     }
     if (!hasProvider) {
       return res.status(503).json({ error: "Le chatbot n'est pas configuré (clé IA manquante)" })
@@ -129,6 +137,10 @@ const chat = async (req, res) => {
 
     const userId = req.user.id
     const lastUserMessage = messages[messages.length - 1]
+    const userProfile = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { country: true, nationality: true, level: true, fields: true, languages: true },
+    })
 
     const reply = await chatWithTools({
       messages: [
