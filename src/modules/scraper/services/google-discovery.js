@@ -32,7 +32,7 @@ function getSearchQueries() {
   // Les six requêtes générales historiques sont conservées.
   // Les requêtes suivantes ciblent des répertoires institutionnels et des
   // appels publiés par des universités, gouvernements et organismes africains.
-  // Total : 14 requêtes Google CSE par exécution (sur le quota standard de 100/jour).
+  // Total : 16 requêtes Google CSE par exécution (sur le quota standard de 100/jour).
   return [
     `bourse d'études Afrique ${year} deadline candidature`,
     `scholarship for African students ${year} deadline apply`,
@@ -45,7 +45,7 @@ function getSearchQueries() {
     `site:campusfrance.org CampusBourses bourses étudiants internationaux ${year}`,
     `site:diplomatie.gouv.fr bourses étudiants étrangers appels candidature ${year}`,
     `site:erasmus-plus.ec.europa.eu Erasmus Mundus scholarships applications ${year} ${nextYear}`,
-    `site:daad.de OR site:daad.de/en scholarships African students ${year} ${nextYear}`,
+    `site:daad.de scholarships African students ${year} ${nextYear}`,
     `site:cscuk.fcdo.gov.uk OR site:chevening.org scholarships applications ${year} ${nextYear}`,
     `site:mastercardfdn.org OR "Mastercard Foundation Scholars Program" university application ${year} ${nextYear}`,
 
