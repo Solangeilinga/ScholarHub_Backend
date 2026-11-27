@@ -71,11 +71,11 @@ function toCandidate(item, source) {
 
 async function discoverWithBrave(apiKey, queries) {
   const candidates = []
-  const pagesPerQuery = getPagesPerQuery('BRAVE_SEARCH_PAGES_PER_QUERY')
-  const configuredMax = Number.parseInt(process.env.BRAVE_SEARCH_MAX_REQUESTS_PER_RUN || '48', 10)
+  const pagesPerQuery = getPagesPerQuery('BRAVE_SEARCH_PAGES_PER_QUERY', 1)
+  const configuredMax = Number.parseInt(process.env.BRAVE_SEARCH_MAX_REQUESTS_PER_RUN || '24', 10)
   const maxRequests = Number.isFinite(configuredMax)
     ? Math.min(48, Math.max(1, configuredMax))
-    : 48
+    : 24
   let requestsMade = 0
 
   for (const query of queries) {
@@ -85,7 +85,7 @@ async function discoverWithBrave(apiKey, queries) {
       try {
         const { data } = await axios.get(BRAVE_ENDPOINT, {
           // La langue suit la requête : français, portugais ou anglais.
-          // On ne force pas de pays afin de ne pas exclure les bourses internationales.
+          // Aucun pays n'est forcé : les requêtes ciblent explicitement plusieurs régions.
           params: {
             q: query,
             count: 20,
