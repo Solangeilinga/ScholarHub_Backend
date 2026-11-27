@@ -127,6 +127,10 @@ const executeScraping = async () => {
   const toProcess = newCandidates.slice(0, MAX_CANDIDATES_PER_RUN)
   logger.info(`[scraper.service] ${toProcess.length} nouvelles pages à analyser (sur ${newCandidates.length} candidates, plafond ${MAX_CANDIDATES_PER_RUN})`)
 
+  // Réserve immédiatement les couples titre/fournisseur pour éviter les doublons
+  // lorsque deux URLs différentes décrivent la même bourse pendant ce run.
+  const seenSemanticKeys = new Set()
+
   await runWithConcurrency(toProcess, async (candidate) => {
     try {
       const page = await fetchCleanText(candidate.link)
@@ -148,7 +152,14 @@ const executeScraping = async () => {
         return
       }
 
-      // Anti-doublon sémantique : même titre + même provider déjà en base
+      // Anti-doublon sémantique : même titre + même provider en base ou dans ce run.
+      const semanticKey = `${(extracted.title || '').trim().toLowerCase().replace(/\\s+/g, ' ')}::${(extracted.provider || '').trim().toLowerCase().replace(/\\s+/g, ' ')}`
+      if (seenSemanticKeys.has(semanticKey)) {
+        results.duplicates++
+        return
+      }
+      seenSemanticKeys.add(semanticKey)
+
       const existing = await prisma.scholarship.findFirst({
         where: {
           title: { equals: extracted.title, mode: 'insensitive' },
