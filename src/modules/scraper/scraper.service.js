@@ -103,6 +103,41 @@ function expandCountries(countries) {
   return countries || []
 }
 
+// Seules les sources explicitement reconnues peuvent alimenter la publication
+// automatique. Les autres restent consultables dans la file de modération.
+const TRUSTED_SOURCE_DOMAINS = [
+  'campusfrance.org', 'diplomatie.gouv.fr', 'erasmus-plus.ec.europa.eu',
+  'daad.de', 'chevening.org', 'mastercardfdn.org', 'au.int', 'auf.org',
+  'scholars4dev.com', 'afterschoolafrica.com', 'afri-carrieres.com',
+  'greatyop.com', 'opportunitiesforafricans.com',
+]
+
+function getSourceTrust(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\\./, '')
+    if (TRUSTED_SOURCE_DOMAINS.some((domain) => host === domain || host.endsWith('.' + domain))) {
+      return 'TRUSTED'
+    }
+    return 'UNVERIFIED'
+  } catch {
+    return 'INVALID'
+  }
+}
+
+function hasReliableExtraction(extracted) {
+  const validCountries = new Set(ALL_AFRICAN_COUNTRY_CODES)
+  const countriesAreValid = Array.isArray(extracted.countries)
+    && extracted.countries.length > 0
+    && extracted.countries.every((country) => country === 'ALL_AFRICA' || validCountries.has(country))
+  const descriptionIsUseful = typeof extracted.description === 'string'
+    && extracted.description.trim().length >= 80
+  const titleIsSpecific = typeof extracted.title === 'string'
+    && extracted.title.trim().length >= 8
+    && !/^(scholarship|bourse|opportunity|opportunité|home|accueil|latest news)$/i.test(extracted.title.trim())
+
+  return countriesAreValid && descriptionIsUseful && titleIsSpecific
+}
+
 const executeScraping = async () => {
   logger.info('🔍 Démarrage du scraping automatique (pipeline IA)...')
   const results = {
@@ -176,14 +211,30 @@ const executeScraping = async () => {
       const extractionNotes = extracted.extractionNotes
       const confidenceScore = extracted.confidenceScore
 
-      // Publication automatique uniquement si les informations essentielles sont solides.
-      // Une deadline absente n'empêche pas la publication si le reste est fiable.
-      const canAutoPublish = confidenceScore >= 0.85
+      const sourceTrust = getSourceTrust(candidate.link)
+      const extractionIsReliable = hasReliableExtraction(extracted)
+      const deadlineIsSafe = !extracted.deadlineWasPast
+
+      // Publication automatique réservée aux domaines reconnus et aux annonces
+      // complètes, cohérentes et non expirées. Toute incertitude = revue humaine.
+      const canAutoPublish = confidenceScore >= 0.90
+        && sourceTrust === 'TRUSTED'
+        && extractionIsReliable
         && extracted.providerWasExtracted
         && extracted.descriptionWasExtracted
         && extracted.typeIsExplicit
-        && extracted.countries.length > 0
+        && deadlineIsSafe
       const publicationStatus = canAutoPublish ? 'APPROVED' : 'PENDING'
+
+      if (sourceTrust !== 'TRUSTED') {
+        logger.info(`[scraper.service] Source non vérifiée — revue humaine requise : ${candidate.link}`)
+      }
+      if (extracted.deadlineWasPast) {
+        logger.info(`[scraper.service] Annonce avec deadline passée — revue humaine requise : ${candidate.link}`)
+      }
+      if (!extractionIsReliable) {
+        logger.info(`[scraper.service] Informations insuffisantes ou incohérentes — revue humaine requise : ${candidate.link}`)
+      }
 
       await prisma.scholarship.create({
         data: {
