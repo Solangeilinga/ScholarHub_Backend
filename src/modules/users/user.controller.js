@@ -60,8 +60,73 @@ const changePassword = async (req, res, next) => {
 
 const deleteAccount = async (req, res, next) => {
   try {
-    await prisma.user.delete({ where: { id: req.user.id } });
-    res.json({ message: 'Compte supprimé' });
+    const { password } = req.body;
+    if (typeof password !== 'string' || !password) {
+      throw new AppError('Votre mot de passe est requis pour confirmer la suppression', 400);
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, passwordHash: true },
+    });
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      throw new AppError('Mot de passe incorrect', 401);
+    }
+
+    // Les relations utilisateur sont configurées avec onDelete: Cascade.
+    // La suppression du compte supprime donc aussi les données qui lui appartiennent.
+    await prisma.user.delete({ where: { id: user.id } });
+    res.json({ message: 'Compte et données personnelles associées supprimés' });
+  } catch (error) { next(error); }
+};
+
+const exportPersonalData = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const [user, saved, applications, notifications, supportTickets, chatMessages] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true, name: true, email: true, country: true, nationality: true,
+          level: true, fields: true, languages: true, bio: true, avatarUrl: true,
+          role: true, isVerified: true, notificationsEnabled: true, createdAt: true,
+        },
+      }),
+      prisma.savedScholarship.findMany({
+        where: { userId },
+        select: { savedAt: true, scholarship: { select: { id: true, title: true, provider: true, deadline: true, link: true } } },
+      }),
+      prisma.application.findMany({
+        where: { userId },
+        select: { status: true, notes: true, appliedAt: true, createdAt: true, updatedAt: true,
+          scholarship: { select: { id: true, title: true, provider: true, deadline: true, link: true } } },
+      }),
+      prisma.notification.findMany({
+        where: { userId },
+        select: { title: true, body: true, type: true, data: true, isRead: true, createdAt: true },
+      }),
+      prisma.supportTicket.findMany({
+        where: { userId },
+        select: { subject: true, message: true, reply: true, status: true, createdAt: true, updatedAt: true },
+      }),
+      prisma.chatMessage.findMany({
+        where: { userId },
+        select: { role: true, content: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+
+    res.setHeader('Content-Disposition', 'attachment; filename="scholarhub-personal-data.json"');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.json({
+      exportedAt: new Date().toISOString(),
+      profile: user,
+      savedScholarships: saved,
+      applications,
+      notifications,
+      supportTickets,
+      chatHistory: chatMessages,
+    });
   } catch (error) { next(error); }
 };
 
@@ -99,4 +164,4 @@ const updateFcmToken = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-module.exports = { getProfile, updateProfile, changePassword, deleteAccount, getSaved, getApplications, updateFcmToken };
+module.exports = { getProfile, updateProfile, changePassword, deleteAccount, exportPersonalData, getSaved, getApplications, updateFcmToken };
