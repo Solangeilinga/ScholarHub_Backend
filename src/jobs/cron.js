@@ -221,6 +221,24 @@ const sendEveningReminder = async () => {
   logger.info(`🌙 Notifications du soir envoyées à ${notifiedIds.length + usersWithoutSaved.length} utilisateurs`);
 };
 
+// ─── Archivage automatique des bourses expirées ────────────────────────────────
+const archiveExpiredScholarships = async () => {
+  const todayUtc = new Date();
+  todayUtc.setUTCHours(0, 0, 0, 0);
+
+  const result = await prisma.scholarship.updateMany({
+    where: {
+      status: 'APPROVED',
+      isActive: true,
+      deadline: { not: null, lt: todayUtc },
+    },
+    data: { isActive: false },
+  });
+
+  logger.info(`📦 Archivage automatique terminé : ${result.count} bourse(s) expirée(s) désactivée(s)`);
+  return result.count;
+};
+
 // ─── 🆕 Scraping automatique ──────────────────────────────────────────────────
 const runDailyScraping = async () => {
   logger.info('🔍 Scraping automatique quotidien...');
@@ -251,8 +269,8 @@ const startCronJobs = () => {
   cron.schedule('0 8 * * *', sendDeadlineReminders, { timezone: 'Africa/Abidjan' });
   cron.schedule('0 9 * * *', notifyNewScholarships, { timezone: 'Africa/Abidjan' });
   cron.schedule('0 20 * * *', sendEveningReminder, { timezone: 'Africa/Abidjan' });
-  cron.schedule('0 3 * * *', runDailyScraping, { timezone: 'Africa/Abidjan' }); // 🆕 3h du matin
-  logger.info('🔄 Cron jobs démarrés (3h scraping, 8h deadlines, 9h nouvelles bourses, 20h le soir)');
+  cron.schedule('0 3 * * *', runDailyScraping, { timezone: 'Africa/Abidjan' }); // Collecte quotidienne à 3h\n  cron.schedule('0 4 * * *', archiveExpiredScholarships, { timezone: 'Africa/Abidjan' }); // Archivage des offres expirées
+  logger.info('🔄 Cron jobs démarrés (3h scraping, 4h archivage, 8h deadlines, 9h nouvelles bourses, 20h le soir)');
 };
 
 module.exports = { startCronJobs };
