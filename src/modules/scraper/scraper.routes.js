@@ -1,37 +1,50 @@
-const express = require('express')
-const router = express.Router()
-const prisma = require('../../config/db')
-const { runScraping, getScrapingStats } = require('./scraper.service')
-const { authenticate, requireAdmin } = require('../../middlewares/auth.middleware')
+const express = require('express');
+const { body, param, validationResult } = require('express-validator');
+const router = express.Router();
+const prisma = require('../../config/db');
+const { runScraping, getScrapingStats } = require('./scraper.service');
+const { authenticate, requireAdmin } = require('../../middlewares/auth.middleware');
+const logger = require('../../utils/logger');
 
-// Lancer le scraping manuellement
-router.post('/run', authenticate, requireAdmin, async (req, res) => {
-  try {
-    // Lancer en arrière-plan pour ne pas bloquer la requête
-    res.json({ message: 'Scraping lancé en arrière-plan' })
-    await runScraping()
-  } catch (e) {
-    console.error(e)
+const asyncHandler = (handler) => (req, res, next) => {
+  Promise.resolve(handler(req, res, next)).catch(next);
+};
+
+const validateRequest = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
   }
-})
+  return next();
+};
 
-// Stats scraping
-router.get('/stats', authenticate, requireAdmin, async (req, res) => {
-  const stats = await getScrapingStats()
-  res.json({ stats })
-})
+const scholarshipIdValidation = [
+  param('id').isString().trim().isLength({ min: 1, max: 100 }).withMessage('Identifiant de bourse invalide'),
+];
 
-// Bourses en attente de validation (les moins fiables d'abord, à vérifier en priorité)
-router.get('/pending', authenticate, requireAdmin, async (req, res) => {
+// Lancer le scraping manuellement : la tâche s'exécute en arrière-plan.
+router.post('/run', authenticate, requireAdmin, (req, res) => {
+  res.status(202).json({ message: 'Scraping lancé en arrière-plan' });
+  runScraping().catch((error) => {
+    logger.error('Échec du scraping manuel', { message: error.message, stack: error.stack });
+  });
+});
+
+router.get('/stats', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const stats = await getScrapingStats();
+  res.json({ stats });
+}));
+
+router.get('/pending', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const scholarships = await prisma.scholarship.findMany({
     where: { status: 'PENDING' },
     orderBy: [{ confidenceScore: 'asc' }, { scrapedAt: 'desc' }],
-  })
-  res.json({ scholarships })
-})
+    take: 100,
+  });
+  res.json({ scholarships });
+}));
 
-// Approuver une bourse
-router.patch('/:id/approve', authenticate, requireAdmin, async (req, res) => {
+router.patch('/:id/approve', authenticate, requireAdmin, scholarshipIdValidation, validateRequest, asyncHandler(async (req, res) => {
   const scholarship = await prisma.scholarship.update({
     where: { id: req.params.id },
     data: {
@@ -40,12 +53,11 @@ router.patch('/:id/approve', authenticate, requireAdmin, async (req, res) => {
       verifiedBy: req.user.id,
       verifiedAt: new Date(),
     },
-  })
-  res.json({ scholarship })
-})
+  });
+  res.json({ scholarship });
+}));
 
-// Rejeter une bourse
-router.patch('/:id/reject', authenticate, requireAdmin, async (req, res) => {
+router.patch('/:id/reject', authenticate, requireAdmin, scholarshipIdValidation, validateRequest, asyncHandler(async (req, res) => {
   const scholarship = await prisma.scholarship.update({
     where: { id: req.params.id },
     data: {
@@ -54,14 +66,16 @@ router.patch('/:id/reject', authenticate, requireAdmin, async (req, res) => {
       verifiedBy: req.user.id,
       verifiedAt: new Date(),
     },
-  })
-  res.json({ scholarship })
-})
+  });
+  res.json({ scholarship });
+}));
 
-// Approuver en masse
-router.post('/approve-all', authenticate, requireAdmin, async (req, res) => {
-  const { ids } = req.body
-  await prisma.scholarship.updateMany({
+router.post('/approve-all', authenticate, requireAdmin, [
+  body('ids').isArray({ min: 1, max: 100 }).withMessage('Sélection de bourses invalide'),
+  body('ids.*').isString().trim().isLength({ min: 1, max: 100 }).withMessage('Identifiant de bourse invalide'),
+], validateRequest, asyncHandler(async (req, res) => {
+  const { ids } = req.body;
+  const result = await prisma.scholarship.updateMany({
     where: { id: { in: ids }, status: 'PENDING' },
     data: {
       status: 'APPROVED',
@@ -69,8 +83,8 @@ router.post('/approve-all', authenticate, requireAdmin, async (req, res) => {
       verifiedBy: req.user.id,
       verifiedAt: new Date(),
     },
-  })
-  res.json({ message: `${ids.length} bourses approuvées` })
-})
+  });
+  res.json({ message: `${result.count} bourses approuvées`, updatedCount: result.count });
+}));
 
-module.exports = router
+module.exports = router;
