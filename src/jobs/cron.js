@@ -223,20 +223,25 @@ const sendEveningReminder = async () => {
 
 // ─── Archivage automatique des bourses expirées ────────────────────────────────
 const archiveExpiredScholarships = async () => {
-  const todayUtc = new Date();
-  todayUtc.setUTCHours(0, 0, 0, 0);
+  try {
+    const todayUtc = new Date();
+    todayUtc.setUTCHours(0, 0, 0, 0);
 
-  const result = await prisma.scholarship.updateMany({
-    where: {
-      status: 'APPROVED',
-      isActive: true,
-      deadline: { not: null, lt: todayUtc },
-    },
-    data: { isActive: false },
-  });
+    const result = await prisma.scholarship.updateMany({
+      where: {
+        status: 'APPROVED',
+        isActive: true,
+        deadline: { not: null, lt: todayUtc },
+      },
+      data: { isActive: false },
+    });
 
-  logger.info(`📦 Archivage automatique terminé : ${result.count} bourse(s) expirée(s) désactivée(s)`);
-  return result.count;
+    logger.info(`📦 Archivage automatique terminé : ${result.count} bourse(s) expirée(s) désactivée(s)`);
+    return result.count;
+  } catch (error) {
+    logger.error(`❌ Échec de l'archivage automatique des bourses expirées : ${error.message}`);
+    return 0;
+  }
 };
 
 // ─── 🆕 Scraping automatique ──────────────────────────────────────────────────
