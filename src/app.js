@@ -35,6 +35,33 @@ const allowedOrigins = [
   .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean);
 
+// En production, refuser de démarrer avec une configuration d'authentification
+// ou des origines web manifestement dangereuses/incomplètes.
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 ||
+      /your_|change.?me|secret.?here/i.test(process.env.JWT_SECRET)) {
+    throw new Error('Configuration invalide : JWT_SECRET doit être un secret aléatoire d’au moins 32 caractères.');
+  }
+  if (!process.env.DATABASE_URL) {
+    throw new Error('Configuration invalide : DATABASE_URL est obligatoire en production.');
+  }
+  if (!process.env.FRONTEND_URL || allowedOrigins.length === 0) {
+    throw new Error('Configuration invalide : FRONTEND_URL ou CORS_ORIGINS doit déclarer au moins une origine web.');
+  }
+  for (const origin of allowedOrigins) {
+    let parsedOrigin;
+    try {
+      parsedOrigin = new URL(origin);
+    } catch {
+      throw new Error('Configuration invalide : une origine CORS est mal formée.');
+    }
+    if (parsedOrigin.protocol !== 'https:' || parsedOrigin.username || parsedOrigin.password ||
+        parsedOrigin.pathname !== '/' || parsedOrigin.search || parsedOrigin.hash) {
+      throw new Error('Configuration invalide : les origines CORS de production doivent être des URL HTTPS exactes.');
+    }
+  }
+}
+
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ''))) {
