@@ -76,10 +76,92 @@ async function collectCandidateLinks() {
   return deduped
 }
 
-async function filterAlreadyKnown(candidates) {
-  const existingLinks = await prisma.scholarship.findMany({ select: { link: true } })
-  const knownSet = new Set(existingLinks.map((s) => normalizeLink(s.link)))
+async function filterAlreadyKnown(candidates, existingScholarships) {
+  const knownSet = new Set(existingScholarships.map((s) => normalizeLink(s.link)))
   return candidates.filter((c) => !knownSet.has(c.normalizedLink))
+}
+
+// Normalise les titres et organismes pour comparer les annonces malgré
+// les accents, la ponctuation, les mots génériques et de petites variantes.
+function normalizeComparableText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\\s+/g, ' ')
+}
+
+const GENERIC_TITLE_WORDS = new Set([
+  'scholarship', 'scholarships', 'bourse', 'bourses', 'grant', 'grants',
+  'funding', 'opportunity', 'opportunities', 'programme', 'program',
+  '2025', '2026', '2027', '2028', '2029',
+])
+
+function meaningfulTokens(value, removeGeneric = false) {
+  const tokens = normalizeComparableText(value).split(' ').filter((token) => token.length > 1)
+  return [...new Set(removeGeneric ? tokens.filter((token) => !GENERIC_TITLE_WORDS.has(token)) : tokens)]
+}
+
+function tokenSimilarity(a, b, removeGeneric = false) {
+  const left = meaningfulTokens(a, removeGeneric)
+  const right = meaningfulTokens(b, removeGeneric)
+  if (!left.length || !right.length) return 0
+  const rightSet = new Set(right)
+  const intersection = left.filter((token) => rightSet.has(token)).length
+  return intersection / new Set([...left, ...right]).size
+}
+
+function bigramSimilarity(a, b) {
+  const left = normalizeComparableText(a).replace(/ /g, '')
+  const right = normalizeComparableText(b).replace(/ /g, '')
+  if (left.length < 2 || right.length < 2) return left === right && left.length > 0 ? 1 : 0
+  const makeBigrams = (value) => {
+    const pairs = []
+    for (let i = 0; i < value.length - 1; i++) pairs.push(value.slice(i, i + 2))
+    return pairs
+  }
+  const leftPairs = makeBigrams(left)
+  const rightPairs = makeBigrams(right)
+  const counts = new Map()
+  for (const pair of leftPairs) counts.set(pair, (counts.get(pair) || 0) + 1)
+  let intersection = 0
+  for (const pair of rightPairs) {
+    const count = counts.get(pair) || 0
+    if (count > 0) {
+      intersection++
+      counts.set(pair, count - 1)
+    }
+  }
+  return (2 * intersection) / (leftPairs.length + rightPairs.length)
+}
+
+function isLikelySameScholarship(candidate, existing) {
+  const candidateTitle = normalizeComparableText(candidate.title)
+  const existingTitle = normalizeComparableText(existing.title)
+  const candidateProvider = normalizeComparableText(candidate.provider)
+  const existingProvider = normalizeComparableText(existing.provider)
+  if (!candidateTitle || !existingTitle || !candidateProvider || !existingProvider) return false
+
+  const sameProvider = candidateProvider === existingProvider
+    || tokenSimilarity(candidateProvider, existingProvider) >= 0.85
+    || bigramSimilarity(candidateProvider, existingProvider) >= 0.90
+  if (!sameProvider) return false
+  if (candidateTitle === existingTitle) return true
+
+  const titleTokenScore = tokenSimilarity(candidateTitle, existingTitle, true)
+  const titleBigramScore = bigramSimilarity(candidateTitle, existingTitle)
+  return (titleTokenScore >= 0.88 && titleBigramScore >= 0.82)
+    || titleBigramScore >= 0.94
+}
+
+function findLikelyDuplicate(extracted, existingScholarships) {
+  return existingScholarships.find((existing) => isLikelySameScholarship({
+    title: extracted.title,
+    provider: extracted.provider,
+  }, existing)) || null
 }
 
 // Petit pool de concurrence maison (évite d'ajouter une dépendance externe)
@@ -156,17 +238,21 @@ const executeScraping = async () => {
   const candidates = await collectCandidateLinks()
   results.candidatesFound = candidates.length
 
-  const newCandidates = await filterAlreadyKnown(candidates)
+  const existingScholarships = await prisma.scholarship.findMany({
+    select: { id: true, link: true, title: true, provider: true },
+  })
+  const newCandidates = await filterAlreadyKnown(candidates, existingScholarships)
   results.alreadyKnown = candidates.length - newCandidates.length
 
   const toProcess = newCandidates.slice(0, MAX_CANDIDATES_PER_RUN)
   logger.info(`[scraper.service] ${toProcess.length} nouvelles pages à analyser (sur ${newCandidates.length} candidates, plafond ${MAX_CANDIDATES_PER_RUN})`)
 
-  // Réserve immédiatement les couples titre/fournisseur pour éviter les doublons
-  // lorsque deux URLs différentes décrivent la même bourse pendant ce run.
-  const seenSemanticKeys = new Set()
+  // Annonces déjà en base et réservations de ce run, pour éviter les doublons
+  // entre plusieurs URLs même lorsque les titres ne sont pas strictement identiques.
+  const knownScholarships = [...existingScholarships]
 
   await runWithConcurrency(toProcess, async (candidate) => {
+    let reservedScholarship = null
     try {
       const page = await fetchCleanText(candidate.link)
       if (!page) {
@@ -187,24 +273,16 @@ const executeScraping = async () => {
         return
       }
 
-      // Anti-doublon sémantique : même titre + même provider en base ou dans ce run.
-      const semanticKey = `${(extracted.title || '').trim().toLowerCase().replace(/\s+/g, ' ')}::${(extracted.provider || '').trim().toLowerCase().replace(/\s+/g, ' ')}`
-      if (seenSemanticKeys.has(semanticKey)) {
+      // Détection tolérante : titres proches + organisme identique ou très proche.
+      // Réservation synchrone avant le prochain await pour gérer la concurrence.
+      const duplicate = findLikelyDuplicate(extracted, knownScholarships)
+      if (duplicate) {
         results.duplicates++
+        logger.info(`[scraper.service] Doublon probable ignoré : "${extracted.title}" (annonce existante ${duplicate.id || 'dans ce run'})`)
         return
       }
-      seenSemanticKeys.add(semanticKey)
-
-      const existing = await prisma.scholarship.findFirst({
-        where: {
-          title: { equals: extracted.title, mode: 'insensitive' },
-          provider: { equals: extracted.provider, mode: 'insensitive' },
-        },
-      })
-      if (existing) {
-        results.duplicates++
-        return
-      }
+      reservedScholarship = { title: extracted.title, provider: extracted.provider }
+      knownScholarships.push(reservedScholarship)
 
       // Une deadline absente reste null : aucune date artificielle n'est créée.
       const deadline = extracted.deadline
@@ -268,6 +346,10 @@ const executeScraping = async () => {
       else results.sentToReview++
       if (confidenceScore < 0.5) results.lowConfidenceInserted++
     } catch (e) {
+      if (reservedScholarship) {
+        const reservationIndex = knownScholarships.indexOf(reservedScholarship)
+        if (reservationIndex !== -1) knownScholarships.splice(reservationIndex, 1)
+      }
       results.errors++
       logger.warn(`[scraper.service] Erreur traitement "${candidate.link}": ${e.message}`)
     }
