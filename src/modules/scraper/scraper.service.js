@@ -114,7 +114,7 @@ const TRUSTED_SOURCE_DOMAINS = [
 
 function getSourceTrust(url) {
   try {
-    const host = new URL(url).hostname.toLowerCase().replace(/^www\\./, '')
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '')
     if (TRUSTED_SOURCE_DOMAINS.some((domain) => host === domain || host.endsWith('.' + domain))) {
       return 'TRUSTED'
     }
