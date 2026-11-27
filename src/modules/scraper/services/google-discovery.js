@@ -90,8 +90,8 @@ async function discoverWithBrave(apiKey, queries) {
             q: query,
             count: 20,
             offset: page,
-            search_lang: /\\b(bolsas|estudo|estudantes)\\b/i.test(query) ? 'pt'
-              : /\\b(bourse|étudiants|études|appel|université|gouvernementale|candidature|bourses)\\b/i.test(query) ? 'fr'
+            search_lang: /(bolsas|estudo|estudantes)/i.test(query) ? 'pt'
+              : /(bourse|étudiants|études|appel|université|gouvernementale|candidature|bourses)/i.test(query) ? 'fr'
                 : 'en',
           },
           headers: { 'X-Subscription-Token': apiKey },
