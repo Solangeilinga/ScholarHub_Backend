@@ -12,6 +12,20 @@ const { extractScholarship } = require('../scraper/services/ai-extractor');
 const { ALL_AFRICAN_COUNTRY_CODES } = require('../scraper/services/constants');
 const { hasProvider } = require('../../utils/llm');
 
+const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[char]));
+
+const getPagination = (query, defaultLimit = 20) => {
+  const parsedPage = Number.parseInt(query.page, 10);
+  const parsedLimit = Number.parseInt(query.limit, 10);
+  const page = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0
+    ? Math.min(parsedLimit, 100)
+    : defaultLimit;
+  return { page, limit, skip: (page - 1) * limit };
+};
+
 router.use(authenticate, requireAdmin);
 
 router.get('/stats', async (req, res, next) => {
@@ -33,8 +47,8 @@ router.get('/stats', async (req, res, next) => {
 
 router.get('/scholarships', async (req, res, next) => {
   try {
-    const { page = 1, limit = 100, search } = req.query;
-    const skip = (page - 1) * parseInt(limit);
+    const { page, limit, skip } = getPagination(req.query, 100);
+    const { search } = req.query;
     const where = {};
     if (search) {
       where.OR = [
@@ -44,14 +58,14 @@ router.get('/scholarships', async (req, res, next) => {
     }
     const [scholarships, total] = await Promise.all([
       prisma.scholarship.findMany({
-        where, skip, take: parseInt(limit),
+        where, skip, take: limit,
         orderBy: { createdAt: 'desc' },
       }),
       prisma.scholarship.count({ where }),
     ]);
     res.json({
       scholarships,
-      pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / parseInt(limit)) },
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) { next(error); }
 });
@@ -60,14 +74,21 @@ router.get('/scholarships', async (req, res, next) => {
 // (compte immédiatement vérifié et actif, pas besoin de passer par l'inscription publique)
 router.post('/users', async (req, res, next) => {
   try {
-    const { name, email, password, role = 'ADMIN' } = req.body;
+    const { name, password } = req.body;
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    // Least privilege: creating a user must not silently grant administrator access.
+    const role = req.body.role === undefined ? 'USER' : req.body.role;
 
-    if (!name || !email || !password) {
-      throw new AppError('Nom, email et mot de passe sont requis', 400);
+    if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100 ||
+        !email || email.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) ||
+        typeof password !== 'string') {
+      throw new AppError('Nom, email valide et mot de passe sont requis', 400);
     }
-    if (password.length < 8) {
-      throw new AppError('Le mot de passe doit contenir au moins 8 caractères', 400);
+    if (password.length < 8 || password.length > 128 ||
+        !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\\d/.test(password)) {
+      throw new AppError('Le mot de passe doit contenir 8 à 128 caractères, une majuscule, une minuscule et un chiffre', 400);
     }
+    const safeName = name.trim();
     if (!['USER', 'ADMIN'].includes(role)) {
       throw new AppError('Rôle invalide', 400);
     }
@@ -81,8 +102,8 @@ router.post('/users', async (req, res, next) => {
 
     const user = await prisma.user.create({
       data: {
-        name,
-        email: email.toLowerCase(),
+        name: safeName,
+        email,
         passwordHash,
         role,
         isVerified: true, // créé par un admin -> pas de vérification email nécessaire
@@ -95,7 +116,7 @@ router.post('/users', async (req, res, next) => {
       to: user.email,
       subject: 'Votre compte administrateur ScholarHub',
       html: `
-        <h2>Bienvenue sur ScholarHub, ${name} !</h2>
+        <h2>Bienvenue sur ScholarHub, ${escapeHtml(safeName)} !</h2>
         <p>Un compte ${role === 'ADMIN' ? 'administrateur' : 'utilisateur'} vient d'être créé pour vous sur le panel ScholarHub.</p>
         <p><strong>Email :</strong> ${user.email}<br/>
         <strong>Mot de passe :</strong> celui qui vous a été communiqué par la personne qui a créé ce compte.</p>
@@ -109,17 +130,16 @@ router.post('/users', async (req, res, next) => {
 
 router.get('/users', async (req, res, next) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
-    const skip = (page - 1) * parseInt(limit);
+    const { page, limit, skip } = getPagination(req.query, 20);
     const [users, total] = await Promise.all([
       prisma.user.findMany({
-        skip, take: parseInt(limit),
+        skip, take: limit,
         orderBy: { createdAt: 'desc' },
         select: { id: true, name: true, email: true, country: true, role: true, isVerified: true, createdAt: true },
       }),
       prisma.user.count(),
     ]);
-    res.json({ users, pagination: { page: parseInt(page), total, totalPages: Math.ceil(total / parseInt(limit)) } });
+    res.json({ users, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) { next(error); }
 });
 
