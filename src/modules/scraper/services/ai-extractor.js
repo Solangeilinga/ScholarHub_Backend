@@ -16,7 +16,7 @@ Règles strictes :
 - N'invente JAMAIS une information qui n'est pas explicitement présente ou clairement déductible du texte. Si une donnée est absente, mets null (ou tableau vide pour les listes).
 - Ne mets JAMAIS un pays, un niveau d'étude ou une deadline "par défaut" si ce n'est pas dans le texte. L'absence d'info doit rester une absence, pas une supposition.
 - "countries" = liste de codes pays ISO 3166-1 alpha-2 des pays dont les étudiants sont éligibles. Si le texte dit "tous pays" ou "tous pays africains", retourne exactement ["ALL_AFRICA"]. Si le texte ne précise aucune restriction géographique claire, retourne [] plutôt que de deviner.
-- "deadline" = date ISO 8601 (YYYY-MM-DD) si trouvable et non déjà passée, sinon null.
+- "deadline" = date ISO 8601 (YYYY-MM-DD) si trouvable, même si elle est passée. Ne masque jamais une date passée : elle sera contrôlée par le système.
 - "level" = sous-liste parmi: ${VALID_LEVELS.join(', ')}. Vide si non précisé.
 - "type" = une valeur parmi: ${VALID_TYPES.join(', ')}. Par défaut "COMPLETE" seulement si le texte décrit clairement une bourse complète.
 - "typeDetails" = précision libre en français si le texte décrit une prise en charge qui ne colle pas exactement à une catégorie simple (ex: réduction de X% sur la scolarité sans allocation, exonération partielle, bourse au mérite couvrant seulement certains frais). null si le type est déjà clair et complet sans nuance à ajouter.
@@ -75,7 +75,10 @@ async function extractScholarship({ url, pageTitle, text }) {
     const typeIsExplicit = VALID_TYPES.includes(parsed.type)
     const type = typeIsExplicit ? parsed.type : 'COMPLETE'
     const deadline = parsed.deadline ? new Date(parsed.deadline) : null
-    const validDeadline = deadline && !isNaN(deadline.getTime()) && deadline > new Date() ? deadline : null
+    const validDeadline = deadline && !isNaN(deadline.getTime()) ? deadline : null
+    const deadlineWasPast = validDeadline
+      ? validDeadline.getTime() < new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z').getTime()
+      : false
     const confidence = typeof parsed.confidence === 'number'
       ? Math.max(0, Math.min(1, parsed.confidence))
       : 0.3
@@ -98,6 +101,7 @@ async function extractScholarship({ url, pageTitle, text }) {
       amount: typeof parsed.amount === 'number' ? parsed.amount : null,
       currency: parsed.currency || null,
       deadline: validDeadline,
+      deadlineWasPast,
       benefits: Array.isArray(parsed.benefits) ? parsed.benefits : [],
       requirements: parsed.requirements || null,
       confidenceScore: confidence,
