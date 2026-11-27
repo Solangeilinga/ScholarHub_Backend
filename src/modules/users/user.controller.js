@@ -20,6 +20,11 @@ const getProfile = async (req, res, next) => {
 
 const updateProfile = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
     const { name, country, nationality, level, fields, languages, bio, notificationsEnabled } = req.body;
     const user = await prisma.user.update({
       where: { id: req.user.id },
@@ -84,6 +89,10 @@ const getApplications = async (req, res, next) => {
 
 const updateFcmToken = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
     const { fcmToken } = req.body;
     await prisma.user.update({ where: { id: req.user.id }, data: { fcmToken } });
     res.json({ message: 'Token FCM mis à jour' });
