@@ -110,6 +110,8 @@ const runScraping = async () => {
     alreadyKnown: 0,
     processed: 0,
     inserted: 0,
+    autoPublished: 0,
+    sentToReview: 0,
     notAScholarship: 0,
     duplicates: 0,
     lowConfidenceInserted: 0,
@@ -200,8 +202,8 @@ const runScraping = async () => {
       })
 
       results.inserted++
-      if (canAutoPublish) results.autoPublished = (results.autoPublished || 0) + 1
-      else results.sentToReview = (results.sentToReview || 0) + 1
+      if (canAutoPublish) results.autoPublished++
+      else results.sentToReview++
       if (confidenceScore < 0.5) results.lowConfidenceInserted++
     } catch (e) {
       results.errors++
@@ -211,7 +213,8 @@ const runScraping = async () => {
 
   logger.info(
     `✅ Scraping IA terminé — Candidats: ${results.candidatesFound}, Déjà connus: ${results.alreadyKnown}, ` +
-    `Analysés: ${results.processed}, Insérés: ${results.inserted} (dont ${results.lowConfidenceInserted} à faible confiance), ` +
+    `Analysés: ${results.processed}, Insérés: ${results.inserted}, Publiés automatiquement: ${results.autoPublished}, ` +
+    `En attente de revue: ${results.sentToReview}, Faible confiance: ${results.lowConfidenceInserted}, ` +
     `Non-bourses: ${results.notAScholarship}, Doublons: ${results.duplicates}, Erreurs: ${results.errors}`
   )
   return results
