@@ -302,6 +302,58 @@ const pickEditableScholarshipFields = (input) => {
   );
 };
 
+const validateScholarshipInput = (data, creating = false) => {
+  const stringLimits = {
+    title: 200, description: 20000, provider: 150, typeDetails: 300,
+    currency: 8, duration: 100, requirements: 10000,
+  };
+  for (const [field, maxLength] of Object.entries(stringLimits)) {
+    if (data[field] === undefined || data[field] === null) continue;
+    if (typeof data[field] !== 'string' || data[field].length > maxLength) {
+      throw new AppError(`Le champ ${field} est invalide ou trop long.`, 400);
+    }
+  }
+
+  if (creating) {
+    if (!data.title?.trim() || data.title.trim().length < 3 ||
+        !data.description?.trim() || !data.provider?.trim()) {
+      throw new AppError('Le titre, la description et le fournisseur sont obligatoires.', 400);
+    }
+  }
+
+  const arrayLimits = { countries: 100, fields: 100, level: 20, benefits: 100, languages: 30 };
+  for (const [field, maxItems] of Object.entries(arrayLimits)) {
+    if (data[field] === undefined) continue;
+    if (!Array.isArray(data[field]) || data[field].length > maxItems ||
+        !data[field].every((item) => typeof item === 'string' && item.length <= 200)) {
+      throw new AppError(`La liste ${field} est invalide.`, 400);
+    }
+  }
+
+  if (data.type !== undefined &&
+      !['COMPLETE', 'PARTIELLE', 'RECHERCHE', 'FORMATION'].includes(data.type)) {
+    throw new AppError('Le type de bourse est invalide.', 400);
+  }
+  for (const field of ['isActive', 'isFeatured']) {
+    if (data[field] !== undefined && typeof data[field] !== 'boolean') {
+      throw new AppError(`Le champ ${field} doit être un booléen.`, 400);
+    }
+  }
+  if (data.amount !== undefined && data.amount !== null &&
+      (typeof data.amount !== 'number' || !Number.isFinite(data.amount) || data.amount < 0 || data.amount > 1e12)) {
+    throw new AppError('Le montant de la bourse est invalide.', 400);
+  }
+  for (const field of ['deadline', 'startDate']) {
+    if (data[field] !== undefined && data[field] !== null) {
+      const date = new Date(data[field]);
+      if (Number.isNaN(date.getTime())) {
+        throw new AppError(`La date ${field} est invalide.`, 400);
+      }
+      data[field] = date;
+    }
+  }
+};
+
 const normalizeExternalUrl = (value, field, required = false) => {
   if (value === undefined || value === null || value === '') {
     if (required) throw new AppError(`Le lien ${field} est obligatoire.`, 400);
@@ -332,6 +384,7 @@ const normalizeExternalUrl = (value, field, required = false) => {
 
 const create = async (data) => {
   const safeData = pickEditableScholarshipFields(data);
+  validateScholarshipInput(safeData, true);
   safeData.link = normalizeExternalUrl(safeData.link, 'de candidature', true);
   if (safeData.providerLogo !== undefined) {
     safeData.providerLogo = normalizeExternalUrl(safeData.providerLogo, 'du logo');
@@ -341,6 +394,7 @@ const create = async (data) => {
 
 const update = async (id, data) => {
   const safeData = pickEditableScholarshipFields(data);
+  validateScholarshipInput(safeData);
   if (Object.keys(safeData).length === 0) {
     throw new AppError('Aucune information modifiable à enregistrer.', 400);
   }
