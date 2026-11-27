@@ -256,7 +256,7 @@ const runDailyScraping = async () => {
         logger.info('⏭️ Scraping quotidien ignoré : une autre exécution est déjà en cours');
         return;
       }
-      logger.info(`✅ Scraping terminé — ${results.inserted} nouvelles bourses insérées (${results.autoPublished} publiées automatiquement, ${results.sentToReview} en attente de validation, ${results.errors} erreur(s))`);
+      logger.info(`✅ Scraping terminé — ${results.autoPublished} bourses publiées automatiquement, ${results.ignoredUnreliable} annonces ignorées (fiabilité insuffisante), ${results.errors} erreur(s)`);
       return;
     } catch (e) {
       logger.error(`❌ Échec du scraping quotidien (tentative ${attempt}/${maxAttempts}): ${e.message}`);
