@@ -18,7 +18,7 @@ const createTicket = async (req, res) => {
 
     const ticket = await prisma.supportTicket.create({
       data: { userId, subject: subject.trim(), message: message.trim() },
-      include: { user: { select: { name: true, email: true } } },
+      select: { id: true, subject: true, message: true, status: true, createdAt: true, updatedAt: true },
     });
 
     res.status(201).json({ ticket });
@@ -32,6 +32,7 @@ const getMyTickets = async (req, res) => {
   try {
     const tickets = await prisma.supportTicket.findMany({
       where: { userId: req.user.id },
+      select: { id: true, subject: true, message: true, reply: true, status: true, createdAt: true, updatedAt: true },
       orderBy: { createdAt: 'desc' },
     });
     res.json({ tickets });
