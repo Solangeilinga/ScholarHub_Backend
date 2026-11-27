@@ -95,7 +95,7 @@ function normalizeComparableText(value) {
 }
 
 const GENERIC_TITLE_WORDS = new Set([
-  'scholarship', 'scholarships', 'bourse', 'bourses', 'grant', 'grants',
+  'scholar', 'scholars', 'scholarship', 'scholarships', 'bourse', 'bourses', 'grant', 'grants',
   'funding', 'opportunity', 'opportunities', 'programme', 'program',
   '2025', '2026', '2027', '2028', '2029',
 ])
