@@ -237,8 +237,55 @@ const getStats = async () => {
   return { total, active, byType };
 };
 
-const create = async (data) => prisma.scholarship.create({ data });
-const update = async (id, data) => prisma.scholarship.update({ where: { id }, data });
+const normalizeExternalUrl = (value, field, required = false) => {
+  if (value === undefined || value === null || value === '') {
+    if (required) throw new AppError(`Le lien ${field} est obligatoire.`, 400);
+    return value;
+  }
+  if (typeof value !== 'string' || value.length > 2048) {
+    throw new AppError(`Le lien ${field} est invalide.`, 400);
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    throw new AppError(`Le lien ${field} doit être une URL valide.`, 400);
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (!['http:', 'https:'].includes(parsed.protocol) ||
+      parsed.username || parsed.password ||
+      hostname === 'localhost' || hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') || !hostname.includes('.') ||
+      /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) {
+    throw new AppError(`Le lien ${field} doit pointer vers un site web HTTP ou HTTPS public.`, 400);
+  }
+
+  return parsed.toString();
+};
+
+const create = async (data) => {
+  const safeData = {
+    ...data,
+    link: normalizeExternalUrl(data.link, 'de candidature', true),
+  };
+  if (data.providerLogo !== undefined) {
+    safeData.providerLogo = normalizeExternalUrl(data.providerLogo, 'du logo');
+  }
+  return prisma.scholarship.create({ data: safeData });
+};
+
+const update = async (id, data) => {
+  const safeData = { ...data };
+  if (data.link !== undefined) {
+    safeData.link = normalizeExternalUrl(data.link, 'de candidature', true);
+  }
+  if (data.providerLogo !== undefined) {
+    safeData.providerLogo = normalizeExternalUrl(data.providerLogo, 'du logo');
+  }
+  return prisma.scholarship.update({ where: { id }, data: safeData });
+};
 const remove = async (id) => prisma.scholarship.delete({ where: { id } });
 
 module.exports = { getAllAdmin, getAll, getFeatured, getOne, getRecommended, saveScholarship, unsaveScholarship, trackApplication, updateApplication, incrementView, getStats, create, update, remove };
