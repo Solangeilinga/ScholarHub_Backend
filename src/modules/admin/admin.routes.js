@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
@@ -27,6 +28,19 @@ const getPagination = (query, defaultLimit = 20) => {
 };
 
 router.use(authenticate, requireAdmin);
+
+const adminActionLimiter = (max, windowMs = 60 * 60 * 1000) => rateLimit({
+  windowMs,
+  max,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user.id,
+  message: { error: 'Trop de demandes administrateur. Réessayez plus tard.' },
+});
+
+const accountCreationLimiter = adminActionLimiter(10);
+const passwordResetLimiter = adminActionLimiter(5);
+const aiExtractionLimiter = adminActionLimiter(10);
 
 router.get('/stats', async (req, res, next) => {
   try {
@@ -72,7 +86,7 @@ router.get('/scholarships', async (req, res, next) => {
 
 // Créer un nouvel utilisateur admin directement depuis le panel
 // (compte immédiatement vérifié et actif, pas besoin de passer par l'inscription publique)
-router.post('/users', async (req, res, next) => {
+router.post('/users', accountCreationLimiter, async (req, res, next) => {
   try {
     const { name, password } = req.body;
     const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
@@ -178,7 +192,7 @@ router.patch('/users/:id/role', async (req, res, next) => {
 
 // Envoyer un lien de réinitialisation de mot de passe à un utilisateur
 // (utile pour le support quand un utilisateur est bloqué)
-router.post('/users/:id/reset-password', async (req, res, next) => {
+router.post('/users/:id/reset-password', passwordResetLimiter, async (req, res, next) => {
   try {
     const target = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!target) throw new AppError('Utilisateur introuvable', 404);
@@ -212,7 +226,7 @@ router.delete('/users/:id', async (req, res, next) => {
 
 // Pré-remplit le formulaire de création de bourse à partir d'un lien ou d'un
 // texte collé, en réutilisant le même pipeline IA que le scraper automatique.
-router.post('/scholarships/ai-extract', async (req, res, next) => {
+router.post('/scholarships/ai-extract', aiExtractionLimiter, async (req, res, next) => {
   try {
     if (!hasProvider) {
       throw new AppError("Aucun fournisseur IA n'est configuré côté serveur (GROQ_API_KEY / GEMINI_API_KEY).", 503);
