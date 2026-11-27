@@ -5,6 +5,19 @@ const { createAndSendNotification } = require('../utils/notifications');
 const { runScraping } = require('../modules/scraper/scraper.service');
 const logger = require('../utils/logger');
 
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"']/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;',
+}[char]));
+
+const safeHttpUrl = (value) => {
+  try {
+    const url = new URL(String(value));
+    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : null;
+  } catch {
+    return null;
+  }
+};
+
 // ─── Rappels deadline ─────────────────────────────────────────────────────────
 const sendDeadlineReminders = async () => {
   logger.info('⏰ Vérification des deadlines...');
@@ -43,16 +56,14 @@ const sendDeadlineReminders = async () => {
                 <h1 style="color: white; margin: 0;">ScholarHub</h1>
               </div>
               <div style="padding: 30px; background: white; border: 1px solid #eee;">
-                <h2>Bonjour ${user.name} 👋</h2>
-                <p>La deadline de la bourse <strong>${scholarship.title}</strong> expire dans <strong>${days} jour(s)</strong>.</p>
+                <h2>Bonjour ${escapeHtml(user.name)} 👋</h2>
+                <p>La deadline de la bourse <strong>${escapeHtml(scholarship.title)}</strong> expire dans <strong>${days} jour(s)</strong>.</p>
                 <div style="background: #F5F6FF; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1A1F8F;">
-                  <h3 style="margin: 0 0 8px;">${scholarship.title}</h3>
-                  <p style="margin: 4px 0;"><strong>Fournisseur:</strong> ${scholarship.provider}</p>
+                  <h3 style="margin: 0 0 8px;">${escapeHtml(scholarship.title)}</h3>
+                  <p style="margin: 4px 0;"><strong>Fournisseur:</strong> ${escapeHtml(scholarship.provider)}</p>
                   <p style="margin: 4px 0;"><strong>Deadline:</strong> ${new Date(scholarship.deadline).toLocaleDateString('fr-FR')}</p>
                 </div>
-                <a href="${scholarship.link}" style="background: #1A1F8F; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; display: inline-block;">
-                  Postuler maintenant
-                </a>
+                ${safeHttpUrl(scholarship.link) ? `<a href="${escapeHtml(safeHttpUrl(scholarship.link))}" style="background: #1A1F8F; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; display: inline-block;">Postuler maintenant</a>` : '<p>Consultez la fiche de la bourse dans ScholarHub pour accéder au lien de candidature.</p>'}
               </div>
             </div>
           `,
@@ -105,12 +116,12 @@ const notifyNewScholarships = async () => {
             <h1 style="color: white; margin: 0;">ScholarHub</h1>
           </div>
           <div style="padding: 30px; background: white; border: 1px solid #eee;">
-            <h2>Bonjour ${user.name} !</h2>
+            <h2>Bonjour ${escapeHtml(user.name)} !</h2>
             <p>${relevant.length} nouvelle(s) bourse(s) correspondent à votre profil :</p>
             ${relevant.map(s => `
               <div style="border: 1px solid #E8EAF6; padding: 15px; margin: 10px 0; border-radius: 8px;">
-                <h3 style="margin: 0 0 8px;">${s.title}</h3>
-                <p style="margin: 0; color: #6B7280;">${s.provider} | Deadline: ${s.deadline ? new Date(s.deadline).toLocaleDateString('fr-FR') : 'Non communiquée'}</p>
+                <h3 style="margin: 0 0 8px;">${escapeHtml(s.title)}</h3>
+                <p style="margin: 0; color: #6B7280;">${escapeHtml(s.provider)} | Deadline: ${s.deadline ? new Date(s.deadline).toLocaleDateString('fr-FR') : 'Non communiquée'}</p>
               </div>
             `).join('')}
           </div>
