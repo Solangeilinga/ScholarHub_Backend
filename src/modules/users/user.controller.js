@@ -67,10 +67,16 @@ const deleteAccount = async (req, res, next) => {
 
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { id: true, passwordHash: true },
+      select: { id: true, passwordHash: true, role: true },
     });
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new AppError('Mot de passe incorrect', 401);
+    }
+    if (user.role === 'ADMIN') {
+      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+      if (adminCount <= 1) {
+        throw new AppError('Le dernier compte administrateur ne peut pas être supprimé', 403);
+      }
     }
 
     // Les relations utilisateur sont configurées avec onDelete: Cascade.
