@@ -103,7 +103,7 @@ function expandCountries(countries) {
   return countries || []
 }
 
-const runScraping = async () => {
+const executeScraping = async () => {
   logger.info('🔍 Démarrage du scraping automatique (pipeline IA)...')
   const results = {
     candidatesFound: 0,
@@ -218,6 +218,28 @@ const runScraping = async () => {
     `Non-bourses: ${results.notAScholarship}, Doublons: ${results.duplicates}, Erreurs: ${results.errors}`
   )
   return results
+}
+
+/*
+ * Verrou local au processus : empêche un lancement manuel et le cron
+ * de traiter les mêmes candidats simultanément sur cette instance Node.js.
+ * Pour plusieurs instances serveur, un verrou partagé en base/Redis sera nécessaire.
+ */
+let scrapingInProgress = false
+
+const runScraping = async () => {
+  if (scrapingInProgress) {
+    logger.warn('[scraper.service] Exécution ignorée : un scraping est déjà en cours sur cette instance')
+    return { skipped: true, reason: 'SCRAPING_ALREADY_RUNNING' }
+  }
+
+  scrapingInProgress = true
+  try {
+    return await executeScraping()
+  } finally {
+    scrapingInProgress = false
+    logger.info('[scraper.service] Verrou de scraping libéré')
+  }
 }
 
 const getScrapingStats = async () => {
