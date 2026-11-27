@@ -52,7 +52,7 @@ function getPagesPerQuery(envName, defaultValue = 2) {
 
 function isExcluded(url) {
   try {
-    const host = new URL(url).hostname.replace(/^www\\./, '')
+    const host = new URL(url).hostname.replace(/^www\./, '')
     return EXCLUDED_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`))
   } catch {
     return true
