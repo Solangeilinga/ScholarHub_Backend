@@ -66,6 +66,10 @@ const getMe = async (req, res, next) => {
 
 const forgotPassword = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
     const { email } = req.body;
     await authService.forgotPassword(email);
     res.json({ message: 'Instructions envoyées par email si le compte existe' });
